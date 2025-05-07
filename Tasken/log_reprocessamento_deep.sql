@@ -1,2 +1,3 @@
 select *, DATEDIFF(SECOND, data_ini, DATA_FIN) as TEMPO from tbl_log_reprocessamento_deep where carteira = 'multicanal_new' order by data_ini desc
 select *, DATEDIFF(MINUTE, data_ini, DATA_FIN) as TEMPO from tbl_log_reprocessamento_deep where carteira = 'crmdac_new' order by data_ini desc
+select *, DATEDIFF(MINUTE, data_ini, DATA_FIN) as TEMPO from tbl_log_reprocessamento_deep where carteira = 'tempooperacional_new' order by data_ini desc

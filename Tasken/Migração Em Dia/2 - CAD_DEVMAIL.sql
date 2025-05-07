@@ -1,0 +1,48 @@
+SELECT * 
+INTO [CAD_DEVMAIL_CARREFOUR]
+FROM OPENQUERY (CS2,'
+SELECT E.*
+FROM CONTRATO A
+JOIN EMAIL E ON A.CPF = E.CPF
+WHERE A.ID_CARTEIRA IN (200,201,202,203,204,205,206,207,208,209,210,211,212,213,214)
+AND A.STATUS IN (0,4,3,5)
+;')
+GO
+
+update [CAD_DEVMAIL_CARREFOUR] set cpf = SUBSTRING(cpf, PATINDEX('%[^0]%', cpf), LEN(cpf))
+GO
+
+--WHILE 1 = 1
+--BEGIN
+--DELETE TOP(100000) A FROM SRC.dbo.CAD_DEVMAIL A
+--JOIN CAD_DEVMAIL_RIACHUELO_migracao_2_2 B ON A.CPF_DEV = B.CPF collate SQL_Latin1_General_CP1_CI_AS
+
+--IF @@ROWCOUNT < 100000
+--	BREAK;
+--END
+--GO
+
+select distinct cpf, email, 
+CASE
+	WHEN [STATUS] = 0 THEN 100
+	WHEN [STATUS] = 1 THEN 50
+	WHEN [STATUS] = 2 THEN 0
+END AS SCORE,  
+CASE
+	WHEN TIPO = 0 THEN 1
+	WHEN TIPO = 4 THEN 94
+	ELSE 7
+END AS TIPO,
+(COALESCE(C.COD_DEVMAIL,0) + (row_number() over (partition by cpf order by cpf)) ) as seqnum
+--(row_number() over (partition by cpf order by cpf)) as seqnum
+INTO [CAD_DEVMAIL_CARREFOUR_INSERT] 
+FROM CAD_DEVMAIL_CARREFOUR a
+inner join src.dbo.cad_dev f ON A.CPF collate SQL_Latin1_General_CP1_CI_AS = f.CPF_DEV
+left join src.dbo.cad_devmail b ON A.CPF collate SQL_Latin1_General_CP1_CI_AS = B.CPF_DEV AND DESC_DEVMAIL = EMAIL COLLATE SQL_Latin1_General_CP1_CI_AS
+OUTER APPLY (SELECT TOP 1 cod_devmail FROM cad_devmail WHERE CPF_DEV = A.CPF collate SQL_Latin1_General_CP1_CI_AS ORDER BY COD_DEVMAIL DESC) C
+WHERE b.cpf_dev is null
+GO
+
+INSERT INTO src.dbo.CAD_DEVmail (CPF_DEV,desc_devmail, PERC_mail, COD_TIPO, COD_devmail)
+SELECT * FROM [CAD_DEVMAIL_CARREFOUR_INSERT]
+WHERE SEQNUM <= 255

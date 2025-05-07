@@ -1,0 +1,102 @@
+--DROP TABLE AUXSRC.dbo.[CAD_DEVT_CARREFOUR]
+--GO
+
+SELECT * 
+INTO AUXSRC.dbo.[CAD_DEVT_CARREFOUR]
+FROM OPENQUERY (CS2,'
+SELECT C.*
+FROM CONTRATO A
+JOIN TELEFONE C ON A.CPF = C.CPF
+WHERE A.ID_CARTEIRA IN (200,201,202,203,204,205,206,207,208,209,210,211,212,213,214)
+AND A.STATUS IN (0,4,3,5)
+;')
+GO
+
+update AUXSRC.dbo.[CAD_DEVT_CARREFOUR] set cpf = SUBSTRING(cpf, PATINDEX('%[^0]%', cpf), LEN(cpf))
+GO
+
+--WHILE 1 = 1
+--BEGIN
+--DELETE top(10000) A FROM src.dbo.CAD_DEVT A
+--JOIN CAD_DEVT_riachuelo_migracao_2_2 B ON A.CPF_DEV = B.CPF collate SQL_Latin1_General_CP1_CI_AS
+
+
+
+--IF @@ROWCOUNT < 10000
+--	BREAK;
+--END
+--GO
+
+select distinct cpf, ddd, RIGHT(numero,10) as tel_tel, 
+CASE
+	WHEN [STATUS] = 0 THEN 100
+	WHEN [STATUS] = 1 THEN 50
+	WHEN [STATUS] = 2 THEN 0
+END AS SCORE
+,
+CASE
+	WHEN TIPO = 0 THEN 1
+	WHEN TIPO = 1 THEN 2
+	WHEN TIPO = 2 THEN 4
+	WHEN TIPO = 3 THEN 5
+	WHEN TIPO = 4 THEN 7
+END AS TIPO
+,(COALESCE(C.COD_tel,0) + (row_number() over (partition by cpf order by cpf))) as seqnum
+into AUXSRC.dbo.[CAD_DEVT_CARREFOUR_INSERT]
+from
+AUXSRC.dbo.[CAD_DEVT_CARREFOUR] a 
+left join cad_devt B ON A.CPF collate SQL_Latin1_General_CP1_CI_AS = B.CPF_DEV AND DDD_TEL = DDD AND TEL_TEL = RIGHT(Numero,10) collate SQL_Latin1_General_CP1_CI_AS
+OUTER APPLY (SELECT TOP 1 cod_tel FROM cad_devt WHERE CPF_DEV = A.CPF collate SQL_Latin1_General_CP1_CI_AS ORDER BY COD_tel DESC) C
+inner join src.dbo.cad_dev d ON A.CPF collate SQL_Latin1_General_CP1_CI_AS = d.CPF_DEV
+WHERE B.cpf_dev is null
+GO
+
+alter table AUXSRC.dbo.[CAD_DEVT_CARREFOUR_INSERT] add ID INT IDENTITY
+GO
+
+CREATE CLUSTERED INDEX CL_IX  on AUXSRC.dbo.[CAD_DEVT_CARREFOUR_INSERT](ID) 
+GO
+
+
+--SP_SPACEUSED CAD_DEVT_riachuelo_migracao_2_2_INSERT
+DECLARE @VLR_INI INT = 1, @VLR_FINAL INT = 10000
+WHILE 1 = 1
+BEGIN
+
+	INSERT INTO CAD_DEVT (CPF_DEV,DDD_TEL, TEL_TEL, PERC_TEL, COD_TIPO, COD_TEL)
+	SELECT cpf, ddd, tel_tel, SCORE, TIPO, seqnum FROM AUXSRC.dbo.[CAD_DEVT_CARREFOUR_INSERT] WHERE ID BETWEEN @VLR_INI AND @VLR_FINAL
+
+	IF @@ROWCOUNT = 0
+		BREAK;
+
+	SET @VLR_INI = @VLR_INI + 10000;
+	SET @VLR_FINAL = @VLR_FINAL + 10000;
+
+END
+GO
+
+--INSERT INTO CAD_DEVT (CPF_DEV,DDD_TEL, TEL_TEL, PERC_TEL, COD_TIPO, COD_TEL)
+--select distinct cpf, ddd, RIGHT(numero,10), 
+--CASE
+--	WHEN [STATUS] = 0 THEN 100
+--	WHEN [STATUS] = 1 THEN 50
+--	WHEN [STATUS] = 2 THEN 0
+--END AS SCORE
+--,
+--CASE
+--	WHEN TIPO = 0 THEN 1
+--	WHEN TIPO = 1 THEN 2
+--	WHEN TIPO = 2 THEN 4
+--	WHEN TIPO = 3 THEN 5
+--	WHEN TIPO = 4 THEN 7
+--END AS TIPO
+--,(row_number() over (partition by cpf order by cpf)) as seqnum
+--from
+--CAD_DEVT_riachuelo_migracao_2_2 a 
+--GO
+
+--select * from CAD_DEVT_riachuelo_migracao_2_2
+--where CPF = '355574608'
+
+--select * from CAD_DEVT
+--WHERE CPF_DEV = '355574608'
