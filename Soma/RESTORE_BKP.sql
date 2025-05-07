@@ -1,5 +1,4 @@
---PEGAR OS NOMES DOS ARQUIVOS DE PARA FAZER RESTORE
- 
+--PEGAR OS NOMES DOS ARQUIVOS DE PARA FAZER RESTORE (se o backup partir do 200)
 select 
 	CASE a.type
 		WHEN 'D' THEN 1
@@ -14,9 +13,6 @@ from msdb..backupset AS a
 inner join msdb..backupmediafamily AS b ON a.media_set_id = b.media_set_id
 where database_name = 'SOMA' and a.type IN ('D', 'L', 'I') and backup_start_date >= '20250316'
 ORDER BY ordem
-
-
-
 -----------------------------------------------------------
 
 -- USAR NORECOVERY PARA CONSEGUIR FAZRE RESTORE NA BASE
@@ -36,7 +32,7 @@ ORDER BY ordem
  
 ---- VERIFICAR ONDE ESTÃO OS ARQUIVOS MDF E LDF
 --RESTORE FILELISTONLY FROM DISK='\\192.168.9.146\srv-arch03\SRV-SOMADB\BACKUP_MSSQL\SRV-SOMADB\DbLogistica\FULL\SRV-SOMADB_DbLogistica_FULL_20240728_223306.bak'
-----RESTORE FILELISTONLY FROM DISK='\\192.168.9.146\srv-arch03\SRV-SOMADB\BACKUP_MSSQL\SRV-SOMADB\DbLogistica\FULL\SRV-SOMADB_DbLogistica_FULL_20220724_222729.bak'
+--RESTORE FILELISTONLY FROM DISK='\\192.168.9.146\srv-arch03\SRV-SOMADB\BACKUP_MSSQL\SRV-SOMADB\DbLogistica\FULL\SRV-SOMADB_DbLogistica_FULL_20220724_222729.bak'
 ----
  
 -- Query para olhar para onde mover os arquivos
