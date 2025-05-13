@@ -129,6 +129,78 @@ ORDER BY
 		t.name, ia1.index_name, ia2.index_name;
 
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
+
+--SUGESTÃO DE INDICE
+SELECT
+    mid.statement,
+    migs.avg_total_user_cost * ( migs.avg_user_impact / 100.0 ) * ( migs.user_seeks + migs.user_scans ) AS improvement_measure,
+    OBJECT_NAME(mid.object_id),
+    'CREATE INDEX [missing_index_' + CONVERT (VARCHAR, mig.index_group_handle) + '_' + CONVERT (VARCHAR, mid.index_handle) + '_' + LEFT(PARSENAME(mid.statement, 1), 32) + ']' + ' ON ' + mid.statement + ' (' + ISNULL(mid.equality_columns, '') + CASE WHEN mid.equality_columns IS NOT NULL AND mid.inequality_columns IS NOT NULL THEN ',' ELSE '' END + ISNULL(mid.inequality_columns, '') + ')' + ISNULL(' INCLUDE (' + mid.included_columns + ')', '') AS create_index_statement,
+    migs.*,
+    mid.database_id,
+    mid.[object_id]
+FROM
+    sys.dm_db_missing_index_groups mig
+    INNER JOIN sys.dm_db_missing_index_group_stats migs ON migs.group_handle = mig.index_group_handle
+    INNER JOIN sys.dm_db_missing_index_details mid ON mig.index_handle = mid.index_handle
+WHERE
+    migs.avg_total_user_cost * ( migs.avg_user_impact / 100.0 ) * ( migs.user_seeks + migs.user_scans ) > 10
+	AND mid.statement LIKE '%SRC_CALLCENTER%'
+ORDER BY
+    migs.avg_total_user_cost * migs.avg_user_impact * ( migs.user_seeks + migs.user_scans ) DESC
+
+----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
+
+--ESTATISTICAS RUINS
+SELECT TOP 100
+    DB_NAME() AS DatabaseName,
+    s.name AS SchemaName,
+    o.name AS TableName,
+    st.name AS StatisticName,
+    stats.auto_created,
+    stats.user_created,
+    stats.no_recompute,
+    stats.has_filter,
+    sp.last_updated,
+    sp.rows, -- TOTAL DE LINHAS DA TABELA QUANDO A ESTATISTICA FOI ATUALIZADA/CRIADA
+    sp.rows_sampled, --SAMPLE UTILIZADO PARA ATUALIZAR/CRIAR O INDICE
+    sp.modification_counter, --LINHAS MODIFICADAS DESDE A ULTIMA ATUALIZADA/CRIADA
+    CASE 
+        WHEN sp.rows > 0 THEN CAST(sp.rows_sampled AS FLOAT) / sp.rows * 100 
+        ELSE 0 
+    END AS SamplingRatePercent --PERCENTUAL DE LINHAS UTILIZADAS DESDE A ULTIMA ATUALIZAÇÃO/CRIAÇÃO
+FROM 
+    sys.stats AS stats
+    CROSS APPLY sys.dm_db_stats_properties(stats.object_id, stats.stats_id) AS sp
+    JOIN sys.objects o ON stats.object_id = o.object_id
+    JOIN sys.schemas s ON o.schema_id = s.schema_id
+    JOIN sys.stats st ON stats.object_id = st.object_id AND stats.stats_id = st.stats_id
+WHERE 
+    o.type = 'U' -- Apenas tabelas usuais
+    AND sp.modification_counter > 1000 -- Mudanças relevantes desde última atualização
+    AND (CAST(sp.rows_sampled AS FLOAT) / NULLIF(sp.rows, 0)) * 100 < 90 -- Amostragem ruim (< 90%)
+	AND CAST(sp.last_updated AS DATE) <= GETDATE()-3
+ORDER BY 
+    sp.modification_counter DESC
+
+----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
+
+--UTILIZAÇÃO DE MEMÓRIA
+SELECT 
+    physical_memory_in_use_kb / 1024 AS SQLServerMemoryMB,
+    large_page_allocations_kb / 1024 AS LargePageAllocMB,
+    locked_page_allocations_kb / 1024 AS LockedPageAllocMB,
+    total_virtual_address_space_kb / 1024 AS TotalVASMB,
+    virtual_address_space_committed_kb / 1024 AS VASCommittedMB,
+    page_fault_count,
+    memory_utilization_percentage,
+    available_commit_limit_kb / 1024 AS AvailableCommitLimitMB,
+    process_physical_memory_low,
+    process_virtual_memory_low
+FROM sys.dm_os_process_memory;
+
+----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
+
 --JOBS
 WITH JobHistorySummary AS (
     SELECT 

@@ -1,0 +1,50 @@
+--DROP TABLE CAD_DEVF_CARREFOUR
+
+SELECT *
+INTO CAD_DEVF_CARREFOUR
+FROM OPENQUERY (CS2,'        
+SELECT DISTINCT A.NUM_CONTRATO AS ''CONTRATO_ORIGINAL'', A.*
+FROM CONTRATO A
+WHERE A.ID_CARTEIRA IN (200,201,202,203,204,205,206,207,208,209,210,211,212,213,214)
+AND A.STATUS IN (0,4,3,5)')
+GO
+
+--DROP TABLE CAD_DEVF_RIACHUELO_CAR11
+
+update CAD_DEVF_CARREFOUR set cpf = SUBSTRING(cpf, PATINDEX('%[^0]%', cpf), LEN(cpf))
+GO
+
+WITH CTE AS
+(
+SELECT *,
+row_number() over (partition by CPF order by CPF) as seq
+FROM CAD_DEVF_CARREFOUR
+)
+SELECT * INTO CAD_DEVF_CARREFOUR_INSERT
+FROM CTE
+WHERE SEQ = 1
+
+insert into SRC.Dbo.cad_dev (cpf_dev, nome_dev, DTNASC_DEV, rg_dev)
+	select DISTINCT cpf, nome, data_nasc, rg
+	from CAD_DEVF_CARREFOUR_INSERT a
+	left join SRC.Dbo.cad_dev b on a.cpf collate SQL_Latin1_General_CP1_CI_AS = b.cpf_dev
+	where b.cpf_dev is null 
+	--AND A.CPF = '12248925859'
+	GO
+
+	insert into SRC.Dbo.AUX_DEV (cpf_dev, DATA_INCLUSAO)
+	select cpf, '20241221'
+	from CAD_DEVF_CARREFOUR_INSERT a
+	left join SRC.Dbo.AUX_DEV b on a.cpf collate SQL_Latin1_General_CP1_CI_AS = b.cpf_dev
+	where b.cpf_dev is null
+	GO
+
+--SELECT * FROM CAD_DEVF_CARREFOUR_TESTE
+
+UPDATE A SET NASC_DEV = B.DATA_NASC from cad_dev a
+join CAD_DEVF_CARREFOUR_INSERT B ON A.CPF_DEV COLLATE Latin1_General_CI_AS = B.CPF
+WHERE NASC_DEV IS NULL
+
+UPDATE A SET NASC_DEV = B.DATA_NASC from cad_dev a
+join CAD_DEVF_CARREFOUR_TESTE_2 B ON A.CPF_DEV COLLATE Latin1_General_CI_AS = B.CPF
+WHERE NASC_DEV IS NULL
