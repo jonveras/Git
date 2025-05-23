@@ -56,7 +56,7 @@ EXEC sp_executesql @SQL;
 
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
 
--- ÍNDICES FRAGMENTADOS
+-- ÝNDICES FRAGMENTADOS
 SELECT TOP 100
 	DB_NAME() AS DatabaseName,
     C.[name] AS TableName,
@@ -78,55 +78,64 @@ ORDER BY
 
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
 
--- ÍNDICES REDUNDANTES
-	WITH IndexColumns AS (
-		SELECT 
-			i.object_id,
-			i.index_id,
-			i.name AS index_name,
-			i.type_desc AS index_type,
-			ic.key_ordinal,
-			c.name AS column_name
-		FROM 
-			sys.indexes i
-		INNER JOIN 
-			sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
-		INNER JOIN 
-			sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
-		WHERE 
-			i.is_hypothetical = 0
-	),
-	IndexAgg AS (
-		SELECT 
-			ic1.object_id,
-			ic1.index_id,
-			ic1.index_name,
-			ic1.index_type,
-			STRING_AGG(ic1.column_name, ',') WITHIN GROUP (ORDER BY ic1.key_ordinal) AS Columns
-		FROM 
-			IndexColumns ic1
-		GROUP BY 
-			ic1.object_id, ic1.index_id, ic1.index_name, ic1.index_type
-	)
-	SELECT 
-		DB_NAME() AS DatabaseName,
-		t.name AS TableName,
-		ia1.index_name AS IndexName1,
-		ia2.index_name AS IndexName2,
-		ia1.index_type AS IndexType1,
-		ia2.index_type AS IndexType2,
-		ia1.Columns AS Columns1,
-		ia2.Columns AS Columns2
-	FROM 
-		IndexAgg ia1
-	JOIN 
-		IndexAgg ia2 ON ia1.object_id = ia2.object_id AND ia1.index_id < ia2.index_id
-	JOIN 
-		sys.tables t ON t.object_id = ia1.object_id
-	WHERE 
-		ia1.Columns = ia2.Columns -- Índices exatamente iguais em colunas e ordem
-	ORDER BY 
-		t.name, ia1.index_name, ia2.index_name;
+-- ÝNDICES REDUNDANTES
+WITH IndexColumns AS (
+    SELECT 
+        i.object_id,
+        i.index_id,
+        i.name AS index_name,
+        i.type_desc,
+        c.name AS column_name,
+        ic.key_ordinal,
+        ic.is_included_column
+    FROM 
+        sys.indexes i
+        INNER JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+        INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+    WHERE 
+        i.is_hypothetical = 0
+),
+IndexAgg AS (
+    SELECT 
+        object_id,
+        index_id,
+        MAX(index_name) AS index_name,
+        MAX(type_desc) AS type_desc,
+        STRING_AGG(CASE WHEN is_included_column = 0 THEN column_name END, ',') 
+            WITHIN GROUP (ORDER BY key_ordinal) AS key_columns,
+        STRING_AGG(CASE WHEN is_included_column = 1 THEN column_name END, ',') 
+            WITHIN GROUP (ORDER BY key_ordinal) AS include_columns
+    FROM 
+        IndexColumns
+    GROUP BY 
+        object_id, index_id
+)
+SELECT 
+    SCHEMA_NAME(o.schema_id) AS schema_name,
+    OBJECT_NAME(ia1.object_id) AS table_name,
+    ia1.index_name AS index1,
+    ia2.index_name AS index2,
+    ia1.type_desc AS type1,
+    ia2.type_desc AS type2,
+    ia1.key_columns,
+    ia1.include_columns AS include_columns1,
+    ia2.include_columns AS include_columns2,
+    'DROP INDEX [' + ia2.index_name + '] ON [' + SCHEMA_NAME(o.schema_id) + '].[' + OBJECT_NAME(o.object_id) + ']' AS drop_statement
+FROM 
+    IndexAgg ia1
+    INNER JOIN IndexAgg ia2 
+        ON ia1.object_id = ia2.object_id
+        AND ia1.index_id < ia2.index_id
+        AND ia1.key_columns = ia2.key_columns
+        AND ISNULL(ia1.include_columns, '') = ISNULL(ia2.include_columns, '')
+        AND (
+            ia1.type_desc = ia2.type_desc
+            OR (ia1.type_desc = 'CLUSTERED' AND ia2.type_desc = 'NONCLUSTERED')
+        )
+    INNER JOIN sys.objects o ON ia1.object_id = o.object_id
+ORDER BY 
+    table_name, ia1.index_name;
+
 
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
 
@@ -152,36 +161,28 @@ ORDER BY
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
 
 --ESTATISTICAS RUINS
-SELECT TOP 100
+SELECT 
     DB_NAME() AS DatabaseName,
     s.name AS SchemaName,
     o.name AS TableName,
-    st.name AS StatisticName,
-    stats.auto_created,
-    stats.user_created,
-    stats.no_recompute,
-    stats.has_filter,
-    sp.last_updated,
-    sp.rows, -- TOTAL DE LINHAS DA TABELA QUANDO A ESTATISTICA FOI ATUALIZADA/CRIADA
-    sp.rows_sampled, --SAMPLE UTILIZADO PARA ATUALIZAR/CRIAR O INDICE
-    sp.modification_counter, --LINHAS MODIFICADAS DESDE A ULTIMA ATUALIZADA/CRIADA
-    CASE 
-        WHEN sp.rows > 0 THEN CAST(sp.rows_sampled AS FLOAT) / sp.rows * 100 
-        ELSE 0 
-    END AS SamplingRatePercent --PERCENTUAL DE LINHAS UTILIZADAS DESDE A ULTIMA ATUALIZAÇÃO/CRIAÇÃO
+    MAX(sp.last_updated) AS LastStatUpdate,
+    COUNT(*) AS OutdatedStatsCount,
+	STRING_AGG(stats.name, ', ') AS AffectedStatistics,
+    'UPDATE STATISTICS [' + s.name + '].[' + o.name + '] WITH FULLSCAN;' AS UpdateStatisticsCommand
 FROM 
     sys.stats AS stats
     CROSS APPLY sys.dm_db_stats_properties(stats.object_id, stats.stats_id) AS sp
     JOIN sys.objects o ON stats.object_id = o.object_id
     JOIN sys.schemas s ON o.schema_id = s.schema_id
-    JOIN sys.stats st ON stats.object_id = st.object_id AND stats.stats_id = st.stats_id
 WHERE 
     o.type = 'U' -- Apenas tabelas usuais
-    AND sp.modification_counter > 1000 -- Mudanças relevantes desde última atualização
-    AND (CAST(sp.rows_sampled AS FLOAT) / NULLIF(sp.rows, 0)) * 100 < 90 -- Amostragem ruim (< 90%)
-	AND CAST(sp.last_updated AS DATE) <= GETDATE()-3
+    AND (sp.modification_counter > 1000 -- Mudan�as relevantes
+    OR (CAST(sp.rows_sampled AS FLOAT) / NULLIF(sp.rows, 0)) * 100 < 90 -- Amostragem ruim
+    OR CAST(sp.last_updated AS DATE) <= GETDATE() - 3) -- Atualiza��o antiga
+GROUP BY 
+    s.name, o.name
 ORDER BY 
-    sp.modification_counter DESC
+    OutdatedStatsCount DESC;
 
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
 
