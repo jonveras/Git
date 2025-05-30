@@ -36,7 +36,7 @@ BEGIN TRY
                                                     
 	IF OBJECT_ID ('SRC.DeepCenter.CAD_DEVF_BRADESCO_SELECAO_REP') IS NOT NULL                           
 	BEGIN                                              
-	DROP TABLE SRC.DeepCenter.CAD_DEVF_BRADESCO_SELECAO_REP                                                    
+		DROP TABLE SRC.DeepCenter.CAD_DEVF_BRADESCO_SELECAO_REP                                                    
 	END                                                   
                              
 	IF OBJECT_ID ('SRC.DeepCenter.AUX_DEVF_BRADESCO_SELECAO_REP') IS NOT NULL                                                    
@@ -455,7 +455,7 @@ BEGIN TRY
 			JOIN SRC.DeepCenter.TAB_IDLIGACAODISCADOR_ACIONA_BRADESCO_SELECAO_REP AS C (NOLOCK) ON C.ID_ACIONA = A.ID_ACIONA                                                    
 			JOIN SRC.DeepCenter.TBL_DEEPCENTER_DISCADOR_OLOS_BRADESCO_SELECAO_2_REP AS B (NOLOCK) ON B.IDCALL = C.IDCALL                                                  
 		WHERE 
-			A.TIPOCANALDEEPCENT_ACIONAMENTO NOT IN (4,10)                                                  
+			A.TIPOCANALDEEPCENT_ACIONAMENTO NOT IN (4, 5, 10)                                                  
                                                     
 		UNION ALL                                                  
                               
@@ -468,7 +468,7 @@ BEGIN TRY
 			SRC.DeepCenter.ACIONA_BRADESCO_SELECAO_REP AS A (NOLOCK)                                                  
 			LEFT JOIN SRC.DeepCenter.TAB_IDLIGACAODISCADOR_ACIONA_BRADESCO_SELECAO_REP AS C (NOLOCK) ON C.ID_ACIONA = A.ID_ACIONA                                            
 		WHERE 
-			A.TIPOCANALDEEPCENT_ACIONAMENTO = 4                                                  
+			A.TIPOCANALDEEPCENT_ACIONAMENTO IN (4, 5)                                                  
                                                   
 		UNION ALL                                                   
                                                   
