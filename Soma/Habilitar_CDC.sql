@@ -25,3 +25,6 @@ EXEC sys.sp_cdc_disable_table
 -- Desabilitar o CDC
 EXEC sp_cdc_disable_db
 GO
+
+-- Verificar a tabela que guarda os dados
+select top 100 * from cdc.dbo_nomedatabela_CT
