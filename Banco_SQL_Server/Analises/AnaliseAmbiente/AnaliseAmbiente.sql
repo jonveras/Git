@@ -250,3 +250,38 @@ WHERE
 	j.enabled = 0 OR hs.TotalRuns IS NULL OR (hs.FailureCount > 0 AND hs.SuccessCount = 0)
 ORDER BY 
     Observacao DESC, hs.LastRunDateTime DESC;
+
+----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
+
+--	Query que mostra algumas sugestão de índices para que possamos analisar a criação
+SELECT 
+dm_mid.database_id AS DatabaseID,
+dm_migs.avg_user_impact*(dm_migs.user_seeks+dm_migs.user_scans) Avg_Estimated_Impact,
+dm_migs.last_user_seek AS Last_User_Seek,
+OBJECT_NAME(dm_mid.OBJECT_ID,dm_mid.database_id) AS [TableName],
+'CREATE NONCLUSTERED INDEX [SK01_'
+ + OBJECT_NAME(dm_mid.OBJECT_ID,dm_mid.database_id) +']'+ 
+
+' ON ' + dm_mid.statement+ ' (' + ISNULL (dm_mid.equality_columns,'')
++ CASE WHEN dm_mid.equality_columns IS NOT NULL AND dm_mid.inequality_columns IS NOT NULL THEN ',' ELSE
+'' END+ ISNULL (dm_mid.inequality_columns, '')
++ ')'+ ISNULL (' INCLUDE (' + dm_mid.included_columns + ')', '') AS Create_Statement,dm_migs.user_seeks,dm_migs.user_scans
+FROM sys.dm_db_missing_index_groups dm_mig
+INNER JOIN sys.dm_db_missing_index_group_stats dm_migs
+ON dm_migs.group_handle = dm_mig.index_group_handle
+INNER JOIN sys.dm_db_missing_index_details dm_mid
+ON dm_mig.index_handle = dm_mid.index_handle
+WHERE dm_mid.database_ID = DB_ID()
+and dm_migs.last_user_seek >= getdate()-1
+ORDER BY Avg_Estimated_Impact DESC
+
+----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
+
+--	Essa query mostra a atualização dos índices desde a última vez que o SQL Server foi reiniciado. Como ainda não rodei nenhuma query, está vazia.
+select getdate(), o.Name,i.name, s.user_seeks,s.user_scans,s.user_lookups, s.user_Updates, 
+	isnull(s.last_user_seek,isnull(s.last_user_scan,s.last_User_Lookup)) Ultimo_acesso,fill_factor
+from sys.dm_db_index_usage_stats s
+	 join sys.indexes i on i.object_id = s.object_id and i.index_id = s.index_id
+	 join sys.sysobjects o on i.object_id = o.id
+where s.database_id = db_id() --and o.name in ('TestesIndices') --and i.name = 'SK02_Telefone_Cliente'
+order by s.user_seeks + s.user_scans + s.user_lookups desc
