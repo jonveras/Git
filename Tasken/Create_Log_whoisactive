@@ -1,0 +1,26 @@
+IF OBJECT_ID('RESULTADO_WHOISACTIVE') IS NOT NULL
+	DROP TABLE RESULTADO_WHOISACTIVE
+
+CREATE TABLE RESULTADO_WHOISACTIVE  (
+      DT_LOG DATETIME ,
+      [DD HH:MM:SS.MSS] VARCHAR(8000) NULL ,
+      [DATABASE_NAME] VARCHAR(128) NULL ,
+      [SESSION_ID] SMALLINT NOT NULL ,
+      BLOCKING_SESSION_ID SMALLINT NULL ,
+      [SQL_TEXT] XML NULL ,
+      [LOGIN_NAME] VARCHAR(128) NOT NULL ,
+      [WAIT_INFO] VARCHAR(4000) NULL ,
+      [STATUS] VARCHAR(30) NOT NULL ,
+      [PERCENT_COMPLETE] VARCHAR(30) NULL ,
+      [HOST_NAME] VARCHAR(128) NULL ,
+      [SQL_COMMAND] XML NULL ,
+      [CPU] VARCHAR(100) ,
+      [READS] VARCHAR(100) ,
+      [WRITES] VARCHAR(100),
+	  [PROGRAM_NAME] VARCHAR(100)
+    );      
+
+
+EXEC sp_WhoIsActive @get_outer_command = 1,
+                    @output_column_list = '[collection_time][d%][session_id][blocking_session_id][sql_text][login_name][wait_info][status][percent_complete][host_name][database_name][sql_command][CPU][reads][writes][program_name]',
+                    @destination_table = 'Resultado_WhoisActive'
