@@ -1,12 +1,15 @@
+--CRIACAO DOS LOGS
+--CRIACAO DA PROCEDURE DE CONTADORES E TABELAS
 USE TaskenMaintDB
 GO
-
 --------------------------------------------------------------------------------------------------------------------------------
 --	Criação da tabela de whoisactive
 --------------------------------------------------------------------------------------------------------------------------------
 
-if OBJECT_ID('Resultado_WhoisActive') is not null
-	drop table Resultado_WhoisActive
+IF OBJECT_ID('Resultado_WhoisActive') IS NOT NULL
+BEGIN
+	DROP TABLE Resultado_WhoisActive
+END
 
 CREATE TABLE Resultado_WhoisActive  (
       Dt_Log DATETIME ,
@@ -28,14 +31,17 @@ CREATE TABLE Resultado_WhoisActive  (
     );
 
 --------------------------------------------------------------------------------------------------------------------------------
---	Criação da tabela de contadores
+--	Criacao das tabelas para armazenar as informacoes
 --------------------------------------------------------------------------------------------------------------------------------
+IF OBJECT_ID('Contador') IS NOT NULL
+BEGIN
+	DROP TABLE Contador
+END
 
-if OBJECT_ID('Contador') is not null
-	drop table Contador
-
-if OBJECT_ID('Registro_Contador') is not null
-	drop table Registro_Contador
+IF OBJECT_ID('Registro_Contador') IS NOT NULL
+BEGIN
+	DROP TABLE Registro_Contador
+END
 
 CREATE TABLE Contador(Id_Contador INT identity, Nm_Contador VARCHAR(50))
 
@@ -47,8 +53,7 @@ INSERT INTO Contador (Nm_Contador)
 SELECT 'CPU'
 INSERT INTO Contador (Nm_Contador)
 SELECT 'Page Life Expectancy'
-
-SELECT * FROM Contador
+GO
 
 CREATE TABLE [dbo].[Registro_Contador](
 	[Id_Registro_Contador] [int] IDENTITY(1,1) NOT NULL,
@@ -58,12 +63,14 @@ CREATE TABLE [dbo].[Registro_Contador](
 ) ON [PRIMARY]
 
 --------------------------------------------------------------------------------------------------------------------------------
---	Criação da procedure para dar carga na tabela de contadores
+--	Criacao da procedure para dar carga na tabela
 --------------------------------------------------------------------------------------------------------------------------------
-if OBJECT_ID('stpCarga_ContadoresSQL') is not null
-	drop procedure stpCarga_ContadoresSQL
-
+IF OBJECT_ID('stpCarga_ContadoresSQL') IS NOT NULL
+BEGIN
+	DROP PROCEDURE stpCarga_ContadoresSQL
+END
 GO
+
 CREATE PROCEDURE stpCarga_ContadoresSQL
 AS
 BEGIN
@@ -110,34 +117,40 @@ BEGIN
 	Select GETDATE(), 3,@CPU
 	insert INTO Registro_Contador(Dt_Log,Id_Contador,Valor)
 	Select GETDATE(), 4,@PLE
-END  
-
---------------------------------------------------------------------------------------------------------------------------------
---	Criação do job da whoisactive
---------------------------------------------------------------------------------------------------------------------------------
-
+END
+GO
+--CRIAR JOB DE LOG DO WHOISACTIVE
 USE [msdb]
 GO
+
+BEGIN TRANSACTION
+DECLARE @ReturnCode INT
+SELECT @ReturnCode = 0
+IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N'[Uncategorized (Local)]' AND category_class=1)
+BEGIN
+EXEC @ReturnCode = msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'[Uncategorized (Local)]'
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+
+END
+
 DECLARE @jobId BINARY(16)
-EXEC  msdb.dbo.sp_add_job @job_name=N'[TaskenMaintDB] - Carga WhoisActive', 
+EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'[TaskenMaintDB] - Carga WhoisActive', 
 		@enabled=1, 
 		@notify_level_eventlog=0, 
-		@notify_level_email=2, 
-		@notify_level_page=2, 
+		@notify_level_email=0, 
+		@notify_level_netsend=0, 
+		@notify_level_page=0, 
 		@delete_level=0, 
 		@category_name=N'[Uncategorized (Local)]', 
 		@owner_login_name=N'src', @job_id = @jobId OUTPUT
-select @jobId
-GO
-EXEC msdb.dbo.sp_add_jobserver @job_name=N'[TaskenMaintDB] - Carga WhoisActive', @server_name = N'SRV01'
-GO
-USE [msdb]
-GO
-EXEC msdb.dbo.sp_add_jobstep @job_name=N'[TaskenMaintDB] - Carga WhoisActive', @step_name=N'Carga Whoisactive', 
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Carga Whoisactive', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
 		@on_success_action=3, 
+		@on_success_step_id=0, 
 		@on_fail_action=2, 
+		@on_fail_step_id=0, 
 		@retry_attempts=3, 
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
@@ -147,117 +160,152 @@ EXEC msdb.dbo.sp_add_jobstep @job_name=N'[TaskenMaintDB] - Carga WhoisActive', @
     @destination_table = ''Resultado_WhoisActive''', 
 		@database_name=N'TaskenMaintDB', 
 		@flags=0
-GO
-USE [msdb]
-GO
-EXEC msdb.dbo.sp_add_jobstep @job_name=N'[TaskenMaintDB] - Carga WhoisActive', @step_name=N'mantem somente 7 dias', 
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'mantem somente 7 dias', 
 		@step_id=2, 
 		@cmdexec_success_code=0, 
 		@on_success_action=1, 
+		@on_success_step_id=0, 
 		@on_fail_action=2, 
+		@on_fail_step_id=0, 
 		@retry_attempts=0, 
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
 		@command=N'DELETE FROM Resultado_WhoisActive WHERE DT_LOG < GETDATE()-7', 
 		@database_name=N'TaskenMaintDB', 
 		@flags=0
-GO
-USE [msdb]
-GO
-EXEC msdb.dbo.sp_update_job @job_name=N'[TaskenMaintDB] - Carga WhoisActive', 
-		@enabled=1, 
-		@start_step_id=1, 
-		@notify_level_eventlog=0, 
-		@notify_level_email=2, 
-		@notify_level_page=2, 
-		@delete_level=0, 
-		@description=N'', 
-		@category_name=N'[Uncategorized (Local)]', 
-		@owner_login_name=N'src', 
-		@notify_email_operator_name=N'', 
-		@notify_page_operator_name=N''
-GO
-USE [msdb]
-GO
-DECLARE @schedule_id int
-EXEC msdb.dbo.sp_add_jobschedule @job_name=N'[TaskenMaintDB] - Carga WhoisActive', @name=N'1 em 1 minuto', 
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'1 em 1 minuto', 
 		@enabled=1, 
 		@freq_type=4, 
 		@freq_interval=1, 
 		@freq_subday_type=4, 
 		@freq_subday_interval=1, 
 		@freq_relative_interval=0, 
-		@freq_recurrence_factor=1, 
+		@freq_recurrence_factor=0, 
 		@active_start_date=20250704, 
 		@active_end_date=99991231, 
 		@active_start_time=0, 
-		@active_end_time=235959, @schedule_id = @schedule_id OUTPUT
-select @schedule_id
+		@active_end_time=235959
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+COMMIT TRANSACTION
+GOTO EndSave
+QuitWithRollback:
+    IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION
+EndSave:
 GO
 
-
---------------------------------------------------------------------------------------------------------------------------------
---	Criação do job de contadores
---------------------------------------------------------------------------------------------------------------------------------
-
+--CRIAR JOB DOS CONTADORES
 USE [msdb]
 GO
+
+BEGIN TRANSACTION
+DECLARE @ReturnCode INT
+SELECT @ReturnCode = 0
+IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N'[Uncategorized (Local)]' AND category_class=1)
+BEGIN
+EXEC @ReturnCode = msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'[Uncategorized (Local)]'
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+
+END
+
 DECLARE @jobId BINARY(16)
-EXEC  msdb.dbo.sp_add_job @job_name=N'[TaskenMaintDB] - CargaContadores', 
+EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'[TaskenMaintDB] - CargaContadores', 
 		@enabled=1, 
 		@notify_level_eventlog=0, 
-		@notify_level_email=2, 
-		@notify_level_page=2, 
+		@notify_level_email=0, 
+		@notify_level_netsend=0, 
+		@notify_level_page=0, 
 		@delete_level=0, 
 		@category_name=N'[Uncategorized (Local)]', 
 		@owner_login_name=N'src', @job_id = @jobId OUTPUT
-select @jobId
-GO
-EXEC msdb.dbo.sp_add_jobserver @job_name=N'[TaskenMaintDB] - CargaContadores', @server_name = N'SRV01'
-GO
-USE [msdb]
-GO
-EXEC msdb.dbo.sp_add_jobstep @job_name=N'[TaskenMaintDB] - CargaContadores', @step_name=N'Carga Contadores', 
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Carga Contadores', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
-		@on_success_action=1, 
+		@on_success_action=3, 
+		@on_success_step_id=0, 
 		@on_fail_action=2, 
+		@on_fail_step_id=0, 
 		@retry_attempts=3, 
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
 		@command=N'exec stpCarga_ContadoresSQL', 
 		@database_name=N'TaskenMaintDB', 
 		@flags=0
-GO
-USE [msdb]
-GO
-EXEC msdb.dbo.sp_update_job @job_name=N'[TaskenMaintDB] - CargaContadores', 
-		@enabled=1, 
-		@start_step_id=1, 
-		@notify_level_eventlog=0, 
-		@notify_level_email=2, 
-		@notify_level_page=2, 
-		@delete_level=0, 
-		@description=N'', 
-		@category_name=N'[Uncategorized (Local)]', 
-		@owner_login_name=N'src', 
-		@notify_email_operator_name=N'', 
-		@notify_page_operator_name=N''
-GO
-USE [msdb]
-GO
-DECLARE @schedule_id int
-EXEC msdb.dbo.sp_add_jobschedule @job_name=N'[TaskenMaintDB] - CargaContadores', @name=N'1 em 1 minuto', 
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'mantem somente 7 dias', 
+		@step_id=2, 
+		@cmdexec_success_code=0, 
+		@on_success_action=1, 
+		@on_success_step_id=0, 
+		@on_fail_action=2, 
+		@on_fail_step_id=0, 
+		@retry_attempts=0, 
+		@retry_interval=0, 
+		@os_run_priority=0, @subsystem=N'TSQL', 
+		@command=N'DELETE FROM TaskenMaintDB.dbo.Registro_Contador where cast(Dt_Log as date) < cast(getdate()-7 as date)', 
+		@database_name=N'TaskenMaintDB', 
+		@flags=0
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'1 em 1 minuto', 
 		@enabled=1, 
 		@freq_type=4, 
 		@freq_interval=1, 
 		@freq_subday_type=4, 
 		@freq_subday_interval=1, 
 		@freq_relative_interval=0, 
-		@freq_recurrence_factor=1, 
+		@freq_recurrence_factor=0, 
 		@active_start_date=20250704, 
 		@active_end_date=99991231, 
 		@active_start_time=0, 
-		@active_end_time=235959, @schedule_id = @schedule_id OUTPUT
-select @schedule_id
+		@active_end_time=235959
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+COMMIT TRANSACTION
+GOTO EndSave
+QuitWithRollback:
+    IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION
+EndSave:
 GO
+
+----ANALISES
+--LOG WHOISACTIVE
+SELECT 
+    [Dt_Log]
+    ,[dd hh:mm:ss.mss]
+    ,[database_name]
+    ,[session_id]
+    ,[blocking_session_id]
+    ,CONVERT(NVARCHAR(MAX), [sql_text]) AS sql_text
+    ,[login_name]
+    ,[wait_info]
+    ,[status]
+    ,[percent_complete]
+    ,[host_name]
+    ,CONVERT(NVARCHAR(MAX), [sql_command]) AS sql_command
+    ,[CPU]
+    ,[reads]
+    ,[writes]
+    ,[Program_Name]
+FROM 
+    Resultado_WhoisActive 
+order by 
+    Dt_Log
+
+--LOG Contadores
+SELECT Nm_Contador,Dt_Log,Valor
+FROM TaskenMaintDB..Contador A 
+	JOIN TaskenMaintDB..Registro_Contador B ON A.Id_Contador = B.Id_Contador
+ORDER BY DT_LOG
+--BatchRequests = transações por segundo
+--User_Connection = conexões no banco
+--CPU = % consumo de cpu do servidor
+--Page Life Expectancy: espectativa de vida em segundos de uma pagina na memoria do sql server (5000 = BOM / 1000 = RAZOAVEL / <300 = BAIXO)
