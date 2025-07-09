@@ -1,15 +1,47 @@
 --CRIACAO DOS LOGS
 --CRIACAO DA PROCEDURE DE CONTADORES E TABELAS
 USE TaskenMaintDB
+GO
+--------------------------------------------------------------------------------------------------------------------------------
+--	Criação da tabela de whoisactive
+--------------------------------------------------------------------------------------------------------------------------------
+
+IF OBJECT_ID('Resultado_WhoisActive') IS NOT NULL
+BEGIN
+	DROP TABLE Resultado_WhoisActive
+END
+
+CREATE TABLE Resultado_WhoisActive  (
+      Dt_Log DATETIME ,
+      [dd hh:mm:ss.mss] VARCHAR(8000) NULL ,
+      [database_name] VARCHAR(128) NULL ,
+      [session_id] SMALLINT NOT NULL ,
+      blocking_session_id SMALLINT NULL ,
+      [sql_text] XML NULL ,
+      [login_name] VARCHAR(128) NOT NULL ,
+      [wait_info] VARCHAR(4000) NULL ,
+      [status] VARCHAR(30) NOT NULL ,
+      [percent_complete] VARCHAR(30) NULL ,
+      [host_name] VARCHAR(128) NULL ,
+      [sql_command] XML NULL ,
+      [CPU] VARCHAR(100) ,
+      [reads] VARCHAR(100) ,
+      [writes] VARCHAR(100),
+	  [Program_Name] VARCHAR(100)
+    );
 
 --------------------------------------------------------------------------------------------------------------------------------
 --	Criacao das tabelas para armazenar as informacoes
 --------------------------------------------------------------------------------------------------------------------------------
 IF OBJECT_ID('Contador') IS NOT NULL
+BEGIN
 	DROP TABLE Contador
+END
 
 IF OBJECT_ID('Registro_Contador') IS NOT NULL
+BEGIN
 	DROP TABLE Registro_Contador
+END
 
 CREATE TABLE Contador(Id_Contador INT identity, Nm_Contador VARCHAR(50))
 
@@ -21,6 +53,7 @@ INSERT INTO Contador (Nm_Contador)
 SELECT 'CPU'
 INSERT INTO Contador (Nm_Contador)
 SELECT 'Page Life Expectancy'
+GO
 
 CREATE TABLE [dbo].[Registro_Contador](
 	[Id_Registro_Contador] [int] IDENTITY(1,1) NOT NULL,
@@ -32,10 +65,12 @@ CREATE TABLE [dbo].[Registro_Contador](
 --------------------------------------------------------------------------------------------------------------------------------
 --	Criacao da procedure para dar carga na tabela
 --------------------------------------------------------------------------------------------------------------------------------
-if OBJECT_ID('stpCarga_ContadoresSQL') is not null
-	drop procedure stpCarga_ContadoresSQL
-
+IF OBJECT_ID('stpCarga_ContadoresSQL') IS NOT NULL
+BEGIN
+	DROP PROCEDURE stpCarga_ContadoresSQL
+END
 GO
+
 CREATE PROCEDURE stpCarga_ContadoresSQL
 AS
 BEGIN
@@ -83,7 +118,7 @@ BEGIN
 	insert INTO Registro_Contador(Dt_Log,Id_Contador,Valor)
 	Select GETDATE(), 4,@PLE
 END
-
+GO
 --CRIAR JOB DE LOG DO WHOISACTIVE
 USE [msdb]
 GO
