@@ -62,6 +62,23 @@ CREATE TABLE [dbo].[Registro_Contador](
 	[Valor] [int] NULL
 ) ON [PRIMARY]
 
+
+--CRIA TABELA DE MEMORIA
+CREATE TABLE Monitoramento_Memoria (
+    DataHora DATETIME DEFAULT GETDATE(),
+    
+    -- Memória do Servidor
+    MemoriaTotalServidor_MB DECIMAL(10,2),
+    MemoriaEmUsoServidor_MB DECIMAL(10,2),
+    MemoriaDisponiveServidorl_MB DECIMAL(10,2),
+    PorcentagemUtilizadaServidor DECIMAL(5,2),
+
+    -- Memória do processo SQL Server
+    MemoriaTotalSQL_MB DECIMAL(10,2),
+    MemoriaEmUsoSQL_MB DECIMAL(10,2),
+    MemoriaDisponiveSQL_MB DECIMAL(10,2),
+    PorcentagemUtilizadaSQL DECIMAL(5,2)
+);
 --------------------------------------------------------------------------------------------------------------------------------
 --	Criacao da procedure para dar carga na tabela
 --------------------------------------------------------------------------------------------------------------------------------
@@ -119,6 +136,87 @@ BEGIN
 	Select GETDATE(), 4,@PLE
 END
 GO
+
+--PROCEDURE PARA COLETAR MEMORIA
+CREATE PROCEDURE Coletar_Memoria
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE 
+        -- Servidor
+        @total_kb_server BIGINT,
+        @available_kb_server BIGINT,
+        @used_kb_server BIGINT,
+        @used_percent_server DECIMAL(5,2),
+
+        -- SQL Server
+        @sql_total_kb BIGINT,
+        @sql_used_kb BIGINT,
+        @sql_available_kb BIGINT,
+        @sql_percent_used DECIMAL(5,2);
+
+    -- Coletar dados de memória do servidor
+    SELECT 
+        @total_kb_server = total_physical_memory_kb,
+        @available_kb_server = available_physical_memory_kb
+    FROM sys.dm_os_sys_memory;
+
+    SET @used_kb_server = @total_kb_server - @available_kb_server;
+
+    SET @used_percent_server = 
+        CASE 
+            WHEN @total_kb_server > 0 
+            THEN (CAST(@used_kb_server AS DECIMAL(18,2)) / @total_kb_server) * 100
+            ELSE 0
+        END;
+
+    -- Coletar dados do processo SQL Server
+    SELECT 
+        @sql_used_kb = physical_memory_in_use_kb / 1024
+    FROM sys.dm_os_process_memory;
+
+    -- Obter o max server memory (em MB) e converter para KB
+    SELECT 
+        @sql_total_kb = CONVERT(BIGINT, value_in_use)
+    FROM sys.configurations
+    WHERE name = 'max server memory (MB)';
+
+    -- Calcular disponível e percentual
+    SET @sql_available_kb = @sql_total_kb - @sql_used_kb;
+
+    SET @sql_percent_used = 
+        CASE 
+            WHEN @sql_total_kb > 0 
+            THEN (CAST(@sql_used_kb AS DECIMAL(18,2)) / @sql_total_kb) * 100
+            ELSE 0
+        END;
+
+    -- Inserir na tabela
+    INSERT INTO Monitoramento_Memoria (
+        DataHora,
+        MemoriaTotalServidor_MB,
+        MemoriaEmUsoServidor_MB,
+        MemoriaDisponiveServidorl_MB,
+        PorcentagemUtilizadaServidor,
+        MemoriaTotalSQL_MB,
+        MemoriaEmUsoSQL_MB,
+        MemoriaDisponiveSQL_MB,
+        PorcentagemUtilizadaSQL
+    )
+    VALUES (
+        GETDATE(),
+        @total_kb_server / 1024.0,
+        @used_kb_server / 1024.0,
+        @available_kb_server / 1024.0,
+        @used_percent_server,
+        @sql_total_kb,
+        @sql_used_kb,
+        @sql_available_kb,
+        @sql_percent_used
+    );
+END;
+
 --CRIAR JOB DE LOG DO WHOISACTIVE
 USE [msdb]
 GO
@@ -276,6 +374,85 @@ QuitWithRollback:
 EndSave:
 GO
 
+--CRIAR JOB MEMORIA
+CREATE PROCEDURE Coletar_Memoria
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE 
+        -- Servidor
+        @total_kb_server BIGINT,
+        @available_kb_server BIGINT,
+        @used_kb_server BIGINT,
+        @used_percent_server DECIMAL(5,2),
+
+        -- SQL Server
+        @sql_total_kb BIGINT,
+        @sql_used_kb BIGINT,
+        @sql_available_kb BIGINT,
+        @sql_percent_used DECIMAL(5,2);
+
+    -- Coletar dados de memória do servidor
+    SELECT 
+        @total_kb_server = total_physical_memory_kb,
+        @available_kb_server = available_physical_memory_kb
+    FROM sys.dm_os_sys_memory;
+
+    SET @used_kb_server = @total_kb_server - @available_kb_server;
+
+    SET @used_percent_server = 
+        CASE 
+            WHEN @total_kb_server > 0 
+            THEN (CAST(@used_kb_server AS DECIMAL(18,2)) / @total_kb_server) * 100
+            ELSE 0
+        END;
+
+    -- Coletar dados do processo SQL Server
+    SELECT 
+        @sql_used_kb = physical_memory_in_use_kb / 1024
+    FROM sys.dm_os_process_memory;
+
+    -- Obter o max server memory (em MB) e converter para KB
+    SELECT 
+        @sql_total_kb = CONVERT(BIGINT, value_in_use)
+    FROM sys.configurations
+    WHERE name = 'max server memory (MB)';
+
+    -- Calcular disponível e percentual
+    SET @sql_available_kb = @sql_total_kb - @sql_used_kb;
+
+    SET @sql_percent_used = 
+        CASE 
+            WHEN @sql_total_kb > 0 
+            THEN (CAST(@sql_used_kb AS DECIMAL(18,2)) / @sql_total_kb) * 100
+            ELSE 0
+        END;
+
+    -- Inserir na tabela
+    INSERT INTO Monitoramento_Memoria (
+        DataHora,
+        MemoriaTotalServidor_MB,
+        MemoriaEmUsoServidor_MB,
+        MemoriaDisponiveServidorl_MB,
+        PorcentagemUtilizadaServidor,
+        MemoriaTotalSQL_MB,
+        MemoriaEmUsoSQL_MB,
+        MemoriaDisponiveSQL_MB,
+        PorcentagemUtilizadaSQL
+    )
+    VALUES (
+        GETDATE(),
+        @total_kb_server / 1024.0,
+        @used_kb_server / 1024.0,
+        @available_kb_server / 1024.0,
+        @used_percent_server,
+        @sql_total_kb,
+        @sql_used_kb,
+        @sql_available_kb,
+        @sql_percent_used
+    );
+END;
 ----ANALISES
 --LOG WHOISACTIVE
 SELECT 
@@ -309,3 +486,5 @@ ORDER BY DT_LOG
 --User_Connection = conexões no banco
 --CPU = % consumo de cpu do servidor
 --Page Life Expectancy: espectativa de vida em segundos de uma pagina na memoria do sql server (5000 = BOM / 1000 = RAZOAVEL / <300 = BAIXO)
+
+SELECT * FROM Monitoramento_Memoria
