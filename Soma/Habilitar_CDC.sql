@@ -12,15 +12,15 @@ GO
 -- Habilitar CDC em tabelas
 EXEC sys.sp_cdc_enable_table 
 	@source_schema = N'dbo', 
-	@source_name   = N'DEPARA_AJUSTE_BAW', 
+	@source_name   = N'tabela', 
 	@role_name     = NULL 
 GO
 
 -- Desabilitar o CDC em tabela
 EXEC sys.sp_cdc_disable_table
     @source_schema = N'dbo',
-    @source_name = N'DEPARA_AJUSTE_BAW',
-    @capture_instance = N'dbo_DEPARA_AJUSTE_BAW';
+    @source_name = N'tabela',
+    @capture_instance = N'dbo_tabela';
 
 -- Desabilitar o CDC
 EXEC sp_cdc_disable_db

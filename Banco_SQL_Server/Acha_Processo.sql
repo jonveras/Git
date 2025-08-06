@@ -31,5 +31,4 @@ ORDER BY
     j.name, s.step_id;
 
 -- acha a sessao do user
-
 select * from sys.dm_exec_sessions where session_id > 50 and login_name 'dominio\usuario'
