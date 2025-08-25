@@ -56,7 +56,7 @@ EXEC sp_executesql @SQL;
 
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
 
--- √ùNDICES FRAGMENTADOS
+-- √çNDICES FRAGMENTADOS
 SELECT TOP 100
 	DB_NAME() AS DatabaseName,
     C.[name] AS TableName,
@@ -78,7 +78,7 @@ ORDER BY
 
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
 
--- √ùNDICES REDUNDANTES
+-- √çNDICES REDUNDANTES
 WITH IndexColumns AS (
     SELECT 
         i.object_id,
@@ -139,7 +139,7 @@ ORDER BY
 
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
 
---SUGEST√ÉO DE INDICE
+--SUGEST√ÉO DE √çNDICE
 SELECT
     mid.statement,
     migs.avg_total_user_cost * ( migs.avg_user_impact / 100.0 ) * ( migs.user_seeks + migs.user_scans ) AS improvement_measure,
@@ -160,7 +160,7 @@ ORDER BY
 
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
 
---ESTATISTICAS RUINS
+--ESTAT√çSTICAS RUINS
 SELECT 
     DB_NAME() AS DatabaseName,
     s.name AS SchemaName,
@@ -176,9 +176,9 @@ FROM
     JOIN sys.schemas s ON o.schema_id = s.schema_id
 WHERE 
     o.type = 'U' -- Apenas tabelas usuais
-    AND (sp.modification_counter > 1000 -- MudanÁas relevantes
+    AND (sp.modification_counter > 1000 -- Mudan√ßas relevantes
     OR (CAST(sp.rows_sampled AS FLOAT) / NULLIF(sp.rows, 0)) * 100 < 90 -- Amostragem ruim
-    OR CAST(sp.last_updated AS DATE) <= GETDATE() - 3) -- AtualizaÁ„o antiga
+    OR CAST(sp.last_updated AS DATE) <= GETDATE() - 3) -- Atualiza√ß√£o antiga
 GROUP BY 
     s.name, o.name
 ORDER BY 
@@ -253,7 +253,7 @@ ORDER BY
 
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
 
---	Query que mostra algumas sugest„o de Ìndices para que possamos analisar a criaÁ„o
+--	Query que mostra algumas sugest√µes de √≠ndices para que possamos analisar a cria√ß√£o
 SELECT 
 dm_mid.database_id AS DatabaseID,
 dm_migs.avg_user_impact*(dm_migs.user_seeks+dm_migs.user_scans) Avg_Estimated_Impact,
@@ -277,7 +277,7 @@ ORDER BY Avg_Estimated_Impact DESC
 
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
 
---	Essa query mostra a atualizaÁ„o dos Ìndices desde a ˙ltima vez que o SQL Server foi reiniciado. Como ainda n„o rodei nenhuma query, est· vazia.
+--	Essa query mostra a atualiza√ß√£o dos √≠ndices desde a √∫ltima vez que o SQL Server foi reiniciado. Como ainda n√£o rodei nenhuma query, est√° vazia.
 select getdate(), o.Name,i.name, s.user_seeks,s.user_scans,s.user_lookups, s.user_Updates, 
 	isnull(s.last_user_seek,isnull(s.last_user_scan,s.last_User_Lookup)) Ultimo_acesso,fill_factor
 from sys.dm_db_index_usage_stats s
