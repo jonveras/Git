@@ -3,7 +3,7 @@
 USE TaskenMaintDB
 GO
 --------------------------------------------------------------------------------------------------------------------------------
---	Criação da tabela de whoisactive
+--	Criaï¿½ï¿½o da tabela de whoisactive
 --------------------------------------------------------------------------------------------------------------------------------
 
 IF OBJECT_ID('Resultado_WhoisActive') IS NOT NULL
@@ -67,13 +67,13 @@ CREATE TABLE [dbo].[Registro_Contador](
 CREATE TABLE Monitoramento_Memoria (
     DataHora DATETIME DEFAULT GETDATE(),
     
-    -- Memória do Servidor
+    -- Memï¿½ria do Servidor
     MemoriaTotalServidor_MB DECIMAL(10,2),
     MemoriaEmUsoServidor_MB DECIMAL(10,2),
     MemoriaDisponiveServidorl_MB DECIMAL(10,2),
     PorcentagemUtilizadaServidor DECIMAL(5,2)--,
 
-    -- Memória do processo SQL Server
+    -- Memï¿½ria do processo SQL Server
     --MemoriaTotalSQL_MB DECIMAL(10,2),
     --MemoriaEmUsoSQL_MB DECIMAL(10,2),
     --MemoriaDisponiveSQL_MB DECIMAL(10,2),
@@ -156,7 +156,7 @@ BEGIN
         @sql_available_kb BIGINT,  
         @sql_percent_used DECIMAL(5,2);  
   
-    -- Coletar dados de memória do servidor  
+    -- Coletar dados de memï¿½ria do servidor  
     SELECT   
         @total_kb_server = total_physical_memory_kb,  
         @available_kb_server = available_physical_memory_kb  
@@ -182,7 +182,7 @@ BEGIN
     --FROM sys.configurations  
     --WHERE name = 'max server memory (MB)';  
   
-    ---- Calcular disponível e percentual  
+    ---- Calcular disponï¿½vel e percentual  
     --SET @sql_available_kb = @sql_total_kb - @sql_used_kb;  
   
     --SET @sql_percent_used =   
@@ -385,7 +385,7 @@ BEGIN
         @sql_available_kb BIGINT,
         @sql_percent_used DECIMAL(5,2);
 
-    -- Coletar dados de memória do servidor
+    -- Coletar dados de memï¿½ria do servidor
     SELECT 
         @total_kb_server = total_physical_memory_kb,
         @available_kb_server = available_physical_memory_kb
@@ -411,7 +411,7 @@ BEGIN
     FROM sys.configurations
     WHERE name = 'max server memory (MB)';
 
-    -- Calcular disponível e percentual
+    -- Calcular disponï¿½vel e percentual
     SET @sql_available_kb = @sql_total_kb - @sql_used_kb;
 
     SET @sql_percent_used = 
@@ -474,9 +474,87 @@ SELECT Nm_Contador,Dt_Log,Valor
 FROM TaskenMaintDB..Contador A 
 	JOIN TaskenMaintDB..Registro_Contador B ON A.Id_Contador = B.Id_Contador
 ORDER BY DT_LOG
---BatchRequests = transações por segundo
---User_Connection = conexões no banco
+--BatchRequests = transaï¿½ï¿½es por segundo
+--User_Connection = conexï¿½es no banco
 --CPU = % consumo de cpu do servidor
 --Page Life Expectancy: espectativa de vida em segundos de uma pagina na memoria do sql server (5000 = BOM / 1000 = RAZOAVEL / <300 = BAIXO)
 
 SELECT * FROM Monitoramento_Memoria
+
+
+------------------------------------------------------------------------------------------------///////
+USE TaskenMaintDB; -- ou a base de administraÃ§Ã£o que vocÃª preferir
+GO
+
+IF OBJECT_ID('dbo.Auditoria_MemoriaSQL') IS NULL
+BEGIN
+    CREATE TABLE dbo.Auditoria_MemoriaSQL
+    (
+        IdAuditoria       BIGINT IDENTITY PRIMARY KEY,
+        DataColeta        DATETIME2 DEFAULT SYSDATETIME(),
+        TotalServerMemoryMB   BIGINT,  -- memÃ³ria que o SQL Server estÃ¡ usando
+        TargetServerMemoryMB  BIGINT,  -- memÃ³ria que o SQL gostaria de ter
+        ProcessMemoryUsedMB   BIGINT,  -- memÃ³ria usada pelo processo sqlservr.exe
+        ProcessMemoryAvailMB  BIGINT,  -- memÃ³ria disponÃ­vel no processo
+        OS_TotalMemoryMB      BIGINT,  -- memÃ³ria fÃ­sica total do servidor
+        OS_AvailableMemoryMB  BIGINT,  -- memÃ³ria livre no SO
+        PendingMemoryGrants   INT,     -- quantas queries aguardam grant
+        ActiveMemoryGrants    INT,     -- quantas queries estÃ£o usando grant
+        CachedPagesMB         BIGINT   -- pÃ¡ginas de buffer pool
+    );
+END
+GO
+
+
+CREATE OR ALTER PROCEDURE dbo.stp_ColetaMemoriaSQL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @TotalMemoryMB BIGINT,
+            @AvailableMemoryMB BIGINT;
+
+    -- InformaÃ§Ãµes do SO
+    SELECT 
+        @TotalMemoryMB = total_physical_memory_kb/1024,
+        @AvailableMemoryMB = available_physical_memory_kb/1024
+    FROM sys.dm_os_sys_memory;
+
+    -- InserÃ§Ã£o no log
+    INSERT INTO dbo.Auditoria_MemoriaSQL
+    (
+        TotalServerMemoryMB,
+        TargetServerMemoryMB,
+        ProcessMemoryUsedMB,
+        ProcessMemoryAvailMB,
+        OS_TotalMemoryMB,
+        OS_AvailableMemoryMB,
+        PendingMemoryGrants,
+        ActiveMemoryGrants,
+        CachedPagesMB
+    )
+    SELECT 
+        (SELECT cntr_value/1024 
+         FROM sys.dm_os_performance_counters 
+         WHERE counter_name = 'Total Server Memory (KB)' AND instance_name = '') AS TotalServerMemoryMB,
+         
+        (SELECT cntr_value/1024 
+         FROM sys.dm_os_performance_counters 
+         WHERE counter_name = 'Target Server Memory (KB)' AND instance_name = '') AS TargetServerMemoryMB,
+
+        (pm.physical_memory_in_use_kb/1024) AS ProcessMemoryUsedMB,
+        (pm.available_commit_limit_kb/1024) AS ProcessMemoryAvailMB,  -- disponÃ­vel para o processo
+
+        @TotalMemoryMB AS OS_TotalMemoryMB,
+        @AvailableMemoryMB AS OS_AvailableMemoryMB,
+
+        (SELECT COUNT(*) FROM sys.dm_exec_query_memory_grants WHERE grant_time IS NULL) AS PendingMemoryGrants,
+        (SELECT COUNT(*) FROM sys.dm_exec_query_memory_grants WHERE grant_time IS NOT NULL) AS ActiveMemoryGrants,
+        (SELECT COUNT(*)*8/1024 FROM sys.dm_os_buffer_descriptors) AS CachedPagesMB
+    FROM sys.dm_os_process_memory pm;
+END
+GO
+
+EXEC stp_ColetaMemoriaSQL
+
+SELECT * FROM Auditoria_MemoriaSQL
