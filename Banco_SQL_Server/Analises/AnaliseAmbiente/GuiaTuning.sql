@@ -1,6 +1,6 @@
 ----------------------------------------------------------------------------------
 
---Rodar a query com o stastics on para ver qual tabela é a maior ofensora 
+--Rodar a query com o stastics on para ver qual tabela Ã© a maior ofensora 
 
 set statistics io on
 
