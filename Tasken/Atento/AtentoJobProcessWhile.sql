@@ -1,0 +1,127 @@
+-----------------------------------------------------------
+-- Passo 1 - Obter os CPR_IDs
+-----------------------------------------------------------
+IF OBJECT_ID('#CPRID') IS NOT NULL
+BEGIN
+    SELECT CPR_ID, ROW_NUMBER()OVER(ORDER BY (SELECT NULL)) AS QTD
+    INTO #CPRID
+    FROM VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_STAGE_PROCESS_TESTE 
+    GROUP BY CPR_ID
+END
+
+DECLARE @I INT = 1,
+@TOTAL INT,
+@CPR_ID INT,
+@CPR_ATUALIZA_STATUS_TELEFONES VARCHAR(10),
+@CPR_ATUALIZA_PERCENTUAIS_TELEFONES VARCHAR(10),
+@CPR_COD_ORIGEM VARCHAR(10),
+@CPR_COD_TIPO VARCHAR(10),
+@CPR_PERCENTUAL_LOC_TELEFONE VARCHAR(10),
+@VLRINI INT = 0,
+@VLRFIM INT = 5000;
+
+-- Pega a quantidade total de registros
+SELECT @TOTAL = COUNT(*) FROM #CPRID;
+
+-----------------------------------------------------------
+-- Passo 2 - Obter as configurações específicas do CPR_ID
+-----------------------------------------------------------
+WHILE @I <= @TOTAL
+BEGIN
+    -- Pega o CPR_ID correspondente à linha atual
+    SELECT @CPR_ID = CPR_ID
+    FROM #CPRID
+    WHERE QTD = @I;
+
+    SELECT 
+        @CPR_ATUALIZA_STATUS_TELEFONES = MAX(CASE WHEN RTRIM(LTRIM(CCP_NOME_CAMPO)) = 'CPR_ATUALIZA_STATUS_TELEFONES' THEN ICP_VALOR_CONFIGURADO END),
+        @CPR_ATUALIZA_PERCENTUAIS_TELEFONES = MAX(CASE WHEN RTRIM(LTRIM(CCP_NOME_CAMPO)) = 'CPR_ATUALIZA_PERCENTUAIS_TELEFONES' THEN ICP_VALOR_CONFIGURADO END),
+        @CPR_COD_ORIGEM = MAX(CASE WHEN RTRIM(LTRIM(CCP_NOME_CAMPO)) = 'CPR_COD_ORIGEM' THEN ICP_VALOR_CONFIGURADO END),
+        @CPR_COD_TIPO = MAX(CASE WHEN RTRIM(LTRIM(CCP_NOME_CAMPO)) = 'CPR_COD_TIPO' THEN ICP_VALOR_CONFIGURADO END),
+        @CPR_PERCENTUAL_LOC_TELEFONE = MAX(CASE WHEN RTRIM(LTRIM(CCP_NOME_CAMPO)) = 'CPR_PERCENTUAL_LOC_TELEFONE' THEN ICP_VALOR_CONFIGURADO END)
+    FROM 
+        VIVO_ATV_HOMOLOGA_PROCESS.DBO.SPR_TBL_CAD_CAMPOS_CONFIGURACAO_PROCESSAMENTO A
+        LEFT JOIN VIVO_ATV_HOMOLOGA_PROCESS.DBO.SPR_TBL_CAD_EXIBE_CONFIGURACAO_PROCESSAMENTO B ON A.CCP_ID = B.ECP_CCP_ID
+        LEFT JOIN VIVO_ATV_HOMOLOGA_PROCESS.DBO.SPR_TBL_CAD_CONFIGURACAO_PROCESSAMENTO C ON B.ECP_PRC_ID = C.CPR_PRC_ID
+        LEFT JOIN VIVO_ATV_HOMOLOGA_PROCESS.DBO.SPR_TBL_CAD_ITENS_CONFIGURACAO_PROCESSAMENTO D ON D.ICP_ECP_ID = B.ECP_ID AND D.ICP_CPR_ID = C.CPR_ID
+    WHERE 
+        C.CPR_ID = @CPR_ID;
+
+    -----------------------------------------------------------
+    -- Passo 3 - Filtrar os casos da tabela C conforme as configs
+    -- e inserir na tabela D
+    -----------------------------------------------------------
+    IF OBJECT_ID('VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_STAGE_PROCESS_FINAL') IS NOT NULL
+    BEGIN
+        DROP TABLE VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_STAGE_PROCESS_FINAL
+    END
+
+    SELECT 
+        B.CPF_DEV,
+        B.COD_TEL,
+        A.DDD_TEL,
+        A.TEL_TEL,
+        A.PERC_TEL,
+        A.COD_TIPO,
+        A.STATUS_TEL,
+        A.COD_ORIGEM,
+        A.BLOQUEIO_TEL,
+        A.ID
+    INTO
+        VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_STAGE_PROCESS_FINAL
+    FROM
+        VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_STAGE_PROCESS_TESTE AS A  WITH (NOLOCK) --STAGE
+        JOIN VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEV_TESTE AS X WITH (NOLOCK) ON X.CPF_DEV = A.CPF_DEV
+        JOIN VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_TESTE AS B WITH (NOLOCK) ON B.CPF_DEV = X.CPF_DEV--_TRATADO 
+                                                                         AND B.DDD_TEL = A.DDD_TEL 
+                                                                         AND A.TEL_TEL = B.TEL_TEL
+    WHERE ( 
+            (@CPR_ATUALIZA_STATUS_TELEFONES = '1' AND (A.STATUS_TEL <> B.STATUS_TEL OR A.BLOQUEIO_TEL <> B.BLOQUEIO_TEL))
+            OR 
+            (@CPR_ATUALIZA_PERCENTUAIS_TELEFONES = '1' AND @CPR_PERCENTUAL_LOC_TELEFONE <> COALESCE(B.PERC_TEL,-1)) 
+            OR
+            (@CPR_COD_ORIGEM  <> '' AND @CPR_COD_ORIGEM <> COALESCE(B.COD_ORIGEM,-1) OR A.COD_ORIGEM IS NOT NULL AND A.COD_ORIGEM <> B.COD_ORIGEM) 
+            OR
+            (@CPR_COD_TIPO  <> '' AND @CPR_COD_TIPO <> COALESCE(B.COD_TIPO,-1) OR A.COD_TIPO IS NOT NULL AND A.COD_TIPO <> B.COD_TIPO) 
+          )
+          AND A.CPR_ID = @CPR_ID;
+
+    -----------------------------------------------------------
+    -- Passo 4 - Atualizar os casos na tabela E com base na D
+    -----------------------------------------------------------
+    WHILE 1=1
+    BEGIN
+    UPDATE B  
+        SET
+            B.STATUS_TEL           = A.STATUS_TEL         ,
+            B.BLOQUEIO_TEL         = A.BLOQUEIO_TEL       ,
+            --B.DTNEGATIV_TEL        = A.DTNEGATIV_TEL      ,
+            B.PERC_TEL             = A.PERC_TEL           ,
+            B.COD_ORIGEM           = A.COD_ORIGEM         ,
+            B.COD_TIPO             = A.COD_TIPO           --,
+            --B.ORDEMPRIORIDADE_TEL  = A.ORDEMPRIORIDADE_TEL,
+            --B.OBSIMP_TEL           = A.OBSIMP_TEL         ,
+            --B.OBS_TEL              = A.OBS_TEL            ,
+            --B.DTCONFIRM_TEL        = A.DTCONFIRM_TEL
+    FROM
+        VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_STAGE_PROCESS_FINAL AS A
+        JOIN VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_TESTE AS B (NOLOCK) ON B.CPF_DEV = A.CPF_DEV AND A.COD_TEL = B.COD_TEL
+    WHERE 
+        A.ID BETWEEN @VLRINI AND @VLRFIM
+
+        IF @@ROWCOUNT = 0 
+        BEGIN 
+            BREAK 
+        END
+
+        SET @VLRINI = @VLRFIM + 1
+        SET @VLRFIM = @VLRFIM + 5000 
+    END
+
+    -----------------------------------------------------------
+    -- Próximo CPR_ID
+    -----------------------------------------------------------
+    SET @I += 1;
+END
+
+TRUNCATE TABLE VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_STAGE_PROCESS_TESTE
