@@ -1,13 +1,17 @@
 -----------------------------------------------------------
 -- Passo 1 - Obter os CPR_IDs
 -----------------------------------------------------------
+DROP TABLE #CPRID
+
 IF OBJECT_ID('#CPRID') IS NOT NULL
 BEGIN
-    SELECT CPR_ID, ROW_NUMBER()OVER(ORDER BY (SELECT NULL)) AS QTD
-    INTO #CPRID
-    FROM VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_STAGE_PROCESS_TESTE 
-    GROUP BY CPR_ID
+    DROP TABLE #CPRID
 END
+
+SELECT CPR_ID, ROW_NUMBER()OVER(ORDER BY (SELECT NULL)) AS QTD
+INTO #CPRID
+FROM VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_STAGE_PROCESS_TESTE 
+GROUP BY CPR_ID
 
 DECLARE @I INT = 1,
 @TOTAL INT,
@@ -66,13 +70,18 @@ BEGIN
         A.STATUS_TEL,
         A.COD_ORIGEM,
         A.BLOQUEIO_TEL,
-        A.ID
+        A.ID,
+        A.DTNEGATIV_TEL,
+        A.ORDEMPRIORIDADE_TEL,
+        A.OBSIMP_TEL,
+        A.OBS_TEL,
+        A.DTCONFIRM_TEL
     INTO
         VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_STAGE_PROCESS_FINAL
     FROM
         VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_STAGE_PROCESS_TESTE AS A  WITH (NOLOCK) --STAGE
         JOIN VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEV_TESTE AS X WITH (NOLOCK) ON X.CPF_DEV = A.CPF_DEV
-        JOIN VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_TESTE AS B WITH (NOLOCK) ON B.CPF_DEV = X.CPF_DEV--_TRATADO 
+        JOIN VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_TESTE AS B WITH (NOLOCK) ON B.CPF_DEV = X.CPF_DEV
                                                                          AND B.DDD_TEL = A.DDD_TEL 
                                                                          AND A.TEL_TEL = B.TEL_TEL
     WHERE ( 
@@ -95,14 +104,14 @@ BEGIN
         SET
             B.STATUS_TEL           = A.STATUS_TEL         ,
             B.BLOQUEIO_TEL         = A.BLOQUEIO_TEL       ,
-            --B.DTNEGATIV_TEL        = A.DTNEGATIV_TEL      ,
+            B.DTNEGATIV_TEL        = A.DTNEGATIV_TEL      ,
             B.PERC_TEL             = A.PERC_TEL           ,
             B.COD_ORIGEM           = A.COD_ORIGEM         ,
-            B.COD_TIPO             = A.COD_TIPO           --,
-            --B.ORDEMPRIORIDADE_TEL  = A.ORDEMPRIORIDADE_TEL,
-            --B.OBSIMP_TEL           = A.OBSIMP_TEL         ,
-            --B.OBS_TEL              = A.OBS_TEL            ,
-            --B.DTCONFIRM_TEL        = A.DTCONFIRM_TEL
+            B.COD_TIPO             = A.COD_TIPO           ,
+            B.ORDEMPRIORIDADE_TEL  = A.ORDEMPRIORIDADE_TEL,
+            B.OBSIMP_TEL           = A.OBSIMP_TEL         ,
+            B.OBS_TEL              = A.OBS_TEL            ,
+            B.DTCONFIRM_TEL        = A.DTCONFIRM_TEL
     FROM
         VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_STAGE_PROCESS_FINAL AS A
         JOIN VIVO_ATV_HOMOLOGA_SRC.DBO.CAD_DEVT_TESTE AS B (NOLOCK) ON B.CPF_DEV = A.CPF_DEV AND A.COD_TEL = B.COD_TEL
