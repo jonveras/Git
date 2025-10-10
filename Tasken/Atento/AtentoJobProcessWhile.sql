@@ -1,9 +1,7 @@
 -----------------------------------------------------------
 -- Passo 1 - Obter os CPR_IDs
 -----------------------------------------------------------
-DROP TABLE #CPRID
-
-IF OBJECT_ID('#CPRID') IS NOT NULL
+IF OBJECT_ID('TEMPDB.DBO.#CPRID') IS NOT NULL
 BEGIN
     DROP TABLE #CPRID
 END
