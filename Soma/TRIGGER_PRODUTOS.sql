@@ -1,0 +1,90 @@
+USE [SOMA]
+GO
+
+/****** Object:  Trigger [dbo].[LXUID_ANM_DATATRANSFERENCIA]    Script Date: 06/10/2025 16:40:32 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TRIGGER [dbo].[LXUID_ANM_DATATRANSFERENCIA]
+ON [dbo].[PRODUTOS]
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+	DECLARE @USUARIO VARCHAR(100) = SUSER_SNAME();
+	DECLARE @STEP VARCHAR (10) = NULL
+	DECLARE @NOMEJOB VARCHAR (100) = NULL
+	DECLARE @program_name VARCHAR(128)
+	
+	IF @USUARIO IN ('ANIMALE\sql.admin')
+	BEGIN
+		--Pega os jobs que estão ativos e insere em uma tabela temporaria
+		SELECT @program_name = program_name
+		FROM sys.dm_exec_sessions
+		WHERE session_id = @@SPID;
+
+		--Pega os jobs que estão ativos e insere em uma tabela temporaria
+
+		-- Pega qual é o job que fez a movimentação.
+		DECLARE @IDJOB VARCHAR (100)
+		DECLARE @JOBID VARCHAR(100)
+	
+
+		SELECT @STEP = LTRIM(RTRIM(SUBSTRING(@program_name,CHARINDEX(' STEP',@program_name), 7)))
+		SELECT @JOBID = LTRIM(RTRIM(SUBSTRING(@program_name,PATINDEX('% 0X%',@program_name),CHARINDEX(':',@program_name)-PATINDEX('% 0X%',@program_name))))
+		SELECT @IDJOB = CONVERT(UNIQUEIDENTIFIER,CONVERT(VARBINARY(16), @JOBID,1))
+
+		SELECT 
+			@NOMEJOB = [NAME] 
+		FROM 
+			MSDB.DBO.SYSJOBS 
+		WHERE 
+			JOB_ID = @IDJOB
+		-- Pega qual é o job que fez a movimentação.
+	END
+
+    -- INSERT
+    INSERT INTO Log_Alteracao_Data_Transferencia (PRODUTO, DATAANTERIOR, DATANOVA, OPERACAO, USUARIO, NOMEJOB, STEPJOB)
+    SELECT 
+        I.PRODUTO,
+        NULL,
+        I.DATA_PARA_TRANSFERENCIA,
+        'INSERT',
+        @USUARIO,
+        @NOMEJOB,
+        @STEP
+    FROM INSERTED I
+    WHERE NOT EXISTS (SELECT 1 FROM DELETED WHERE DELETED.PRODUTO = I.PRODUTO);
+
+    -- UPDATE
+    INSERT INTO Log_Alteracao_Data_Transferencia (PRODUTO, DATAANTERIOR, DATANOVA, OPERACAO, USUARIO, NOMEJOB, STEPJOB)
+    SELECT 
+        D.PRODUTO,
+        D.DATA_PARA_TRANSFERENCIA,
+        I.DATA_PARA_TRANSFERENCIA,
+        'UPDATE',
+        @USUARIO,
+        @NOMEJOB,
+        @STEP
+    FROM DELETED D
+    JOIN INSERTED I ON D.PRODUTO = I.PRODUTO
+    WHERE D.DATA_PARA_TRANSFERENCIA <> I.DATA_PARA_TRANSFERENCIA;
+
+    -- DELETE
+    INSERT INTO Log_Alteracao_Data_Transferencia (PRODUTO, DATAANTERIOR, DATANOVA, OPERACAO, USUARIO, NOMEJOB, STEPJOB)
+    SELECT 
+        D.PRODUTO,
+        D.DATA_PARA_TRANSFERENCIA,
+        NULL,
+        'DELETE',
+        @USUARIO,
+        @NOMEJOB,
+        @STEP
+    FROM DELETED D
+    WHERE NOT EXISTS (SELECT 1 FROM INSERTED WHERE INSERTED.PRODUTO = D.PRODUTO);
+END
+GO

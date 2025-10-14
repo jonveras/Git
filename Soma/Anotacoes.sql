@@ -11,5 +11,12 @@
     5 - a tabela job_audit mostra todas as modificações
 
     6 - Solicitar a power para acompanhar o sped nos primeiros 5 dias do mês, o mais importante são os steps 6, 7, 8
- 
+
+    7 - TIME LINX SUPORTE:
+    de manha maicon santana
+    a tarde rodrigo ferreira ou johnny bittencourt
+    de madrugada marcus oliveira
+
+    8 - os jobs 000_DD_04HR_UPDATE_OBJETOS_BI e 000_DD_01HR_LX_GS_PROCESSOS_PCP_MRP_PLANEJAMENTO podem se travar
+    step 10 do objetos_bi trava o 5 do mrp
  /*
