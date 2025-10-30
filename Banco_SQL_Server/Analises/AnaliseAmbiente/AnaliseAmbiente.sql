@@ -25,9 +25,23 @@ ORDER BY
 
 --TOP 10 TABELAS MAIS PESADAS POR BASE
 -- Gera um SELECT dinâmico para cada base de dados (exceto as de sistema)
+-- Cria a tabela temporária para armazenar os resultados
+IF OBJECT_ID('tempdb..#TopTabelas') IS NOT NULL DROP TABLE #TopTabelas;
+
+CREATE TABLE #TopTabelas (
+    database_name SYSNAME,
+    schema_name SYSNAME,
+    table_name SYSNAME,
+    row_count BIGINT,
+    total_size_mb DECIMAL(18,2)
+);
+
+-- Monta o SQL dinâmico
 DECLARE @SQL NVARCHAR(MAX) = N'';
+
 SELECT @SQL += '
 USE [' + name + '];
+INSERT INTO #TopTabelas (database_name, schema_name, table_name, row_count, total_size_mb)
 SELECT TOP 10
     DB_NAME() AS database_name,
     s.name AS schema_name,
@@ -41,18 +55,21 @@ FROM
     INNER JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id
     INNER JOIN sys.allocation_units a ON p.partition_id = a.container_id
 WHERE 
-    i.type IN (0,1)  -- heap ou clustered
+    i.type IN (0,1)
 GROUP BY 
     s.name, t.name, p.rows
 ORDER BY 
     total_size_mb DESC;
-
-' 
+'
 FROM sys.databases
-WHERE state_desc = 'ONLINE' AND name NOT IN ('master','model','msdb','tempdb');
+WHERE state_desc = 'ONLINE' AND name NOT IN ('master','model','msdb','tempdb','SSISDB');
 
 -- Executa tudo de uma vez
 EXEC sp_executesql @SQL;
+
+-- Mostra o resultado consolidado
+SELECT * FROM #TopTabelas
+ORDER BY database_name,total_size_mb DESC;
 
 ----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//----------//
 
