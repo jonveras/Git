@@ -6,9 +6,9 @@ GO
 --	Cria��o da tabela de whoisactive
 --------------------------------------------------------------------------------------------------------------------------------
 
-IF OBJECT_ID('Resultado_WhoisActive') IS NOT NULL
+IF OBJECT_ID('Resultado_WhoisActive_temp') IS NOT NULL
 BEGIN
-	DROP TABLE Resultado_WhoisActive
+	DROP TABLE Resultado_WhoisActive_temp
 END
 
 CREATE TABLE Resultado_WhoisActive  (
@@ -24,6 +24,30 @@ CREATE TABLE Resultado_WhoisActive  (
       [percent_complete] VARCHAR(30) NULL ,
       [host_name] VARCHAR(128) NULL ,
       [sql_command] XML NULL ,
+      [CPU] VARCHAR(100) ,
+      [reads] VARCHAR(100) ,
+      [writes] VARCHAR(100),
+	  [Program_Name] VARCHAR(100)
+    );
+
+IF OBJECT_ID('Resultado_WhoisActivep') IS NOT NULL
+BEGIN
+	DROP TABLE Resultado_WhoisActiv_temp
+END
+
+CREATE TABLE Resultado_WhoisActive  (
+      Dt_Log DATETIME ,
+      [dd hh:mm:ss.mss] VARCHAR(8000) NULL ,
+      [database_name] VARCHAR(128) NULL ,
+      [session_id] SMALLINT NOT NULL ,
+      blocking_session_id SMALLINT NULL ,
+      [sql_text] NVARCHAR(MAX) NULL ,
+      [login_name] VARCHAR(128) NOT NULL ,
+      [wait_info] VARCHAR(4000) NULL ,
+      [status] VARCHAR(30) NOT NULL ,
+      [percent_complete] VARCHAR(30) NULL ,
+      [host_name] VARCHAR(128) NULL ,
+      [sql_command] NVARCHAR(MAX) NULL ,
       [CPU] VARCHAR(100) ,
       [reads] VARCHAR(100) ,
       [writes] VARCHAR(100),
@@ -213,9 +237,11 @@ END;
 USE [msdb]
 GO
 
+/****** Object:  Job [[TaskenMaintDB] - Carga WhoisActive]    Script Date: 05/01/2026 13:24:39 ******/
 BEGIN TRANSACTION
 DECLARE @ReturnCode INT
 SELECT @ReturnCode = 0
+/****** Object:  JobCategory [[Uncategorized (Local)]]    Script Date: 05/01/2026 13:24:39 ******/
 IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N'[Uncategorized (Local)]' AND category_class=1)
 BEGIN
 EXEC @ReturnCode = msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'[Uncategorized (Local)]'
@@ -231,9 +257,11 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'[TaskenMaintDB] - Carga Whoi
 		@notify_level_netsend=0, 
 		@notify_level_page=0, 
 		@delete_level=0, 
+		@description=N'No description available.', 
 		@category_name=N'[Uncategorized (Local)]', 
 		@owner_login_name=N'src', @job_id = @jobId OUTPUT
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+/****** Object:  Step [Carga Whoisactive]    Script Date: 05/01/2026 13:24:40 ******/
 EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Carga Whoisactive', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
@@ -244,15 +272,70 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Carga Wh
 		@retry_attempts=3, 
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
-		@command=N'EXEC sp_WhoIsActive @get_outer_command = 1,
+		@command=N'TRUNCATE TABLE RESULTADO_WHOISACTIVE_TEMP
+GO
+
+EXEC sp_WhoIsActive @get_outer_command = 1,
             @output_column_list = ''[collection_time][d%][session_id][blocking_session_id][sql_text][login_name][wait_info][status][percent_complete]
       [host_name][database_name][sql_command][CPU][reads][writes][program_name]'',
-    @destination_table = ''Resultado_WhoisActive''', 
-		@database_name=N'TaskenMaintDB', 
+    @destination_table = ''Resultado_WhoisActive_temp''', 
+		@database_name=N'SRC', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'mantem somente 7 dias', 
+/****** Object:  Step [INSERE]    Script Date: 05/01/2026 13:24:40 ******/
+EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'INSERE', 
 		@step_id=2, 
+		@cmdexec_success_code=0, 
+		@on_success_action=3, 
+		@on_success_step_id=0, 
+		@on_fail_action=2, 
+		@on_fail_step_id=0, 
+		@retry_attempts=0, 
+		@retry_interval=0, 
+		@os_run_priority=0, @subsystem=N'TSQL', 
+		@command=N'INSERT INTO RESULTADO_WHOISACTIVE (
+     [DT_LOG]
+    ,[DD HH:MM:SS.MSS]
+    ,[DATABASE_NAME]
+    ,[SESSION_ID]
+    ,[BLOCKING_SESSION_ID]
+    ,SQL_TEXT
+    ,[LOGIN_NAME]
+    ,[WAIT_INFO]
+    ,[STATUS]
+    ,[PERCENT_COMPLETE]
+    ,[HOST_NAME]
+    ,SQL_COMMAND
+    ,[CPU]
+    ,[READS]
+    ,[WRITES]
+    ,[PROGRAM_NAME]
+)
+SELECT 
+     [DT_LOG]
+    ,[DD HH:MM:SS.MSS]
+    ,[DATABASE_NAME]
+    ,[SESSION_ID]
+    ,[BLOCKING_SESSION_ID]
+    ,CONVERT(NVARCHAR(MAX), [SQL_TEXT]) AS SQL_TEXT
+    ,[LOGIN_NAME]
+    ,[WAIT_INFO]
+    ,[STATUS]
+    ,[PERCENT_COMPLETE]
+    ,[HOST_NAME]
+    ,CONVERT(NVARCHAR(MAX), [SQL_COMMAND]) AS SQL_COMMAND
+    ,[CPU]
+    ,[READS]
+    ,[WRITES]
+    ,[PROGRAM_NAME]
+FROM 
+    RESULTADO_WHOISACTIVE_TEMP', 
+		@database_name=N'SRC', 
+		@flags=0
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+/****** Object:  Step [mantem somente 7 dias]    Script Date: 05/01/2026 13:24:40 ******/
+EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'mantem somente 7 dias', 
+		@step_id=3, 
 		@cmdexec_success_code=0, 
 		@on_success_action=1, 
 		@on_success_step_id=0, 
@@ -262,7 +345,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'mantem s
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
 		@command=N'DELETE FROM Resultado_WhoisActive WHERE DT_LOG < GETDATE()-7', 
-		@database_name=N'TaskenMaintDB', 
+		@database_name=N'SRC', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
@@ -288,6 +371,7 @@ QuitWithRollback:
     IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION
 EndSave:
 GO
+
 
 --CRIAR JOB DOS CONTADORES
 USE [msdb]
