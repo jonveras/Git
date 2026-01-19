@@ -1,150 +1,38 @@
-SELECT LP.*,      
- CAST(HSP2_2.DATA_HORA AS datetime) AS DATA_PICKING_LIST_EMITIDO,      
- CAST(HSP2_3.DATA_HORA AS datetime) AS DATA_EM_SEPARACAO,      
- CAST(HSP2.DATA_HORA AS datetime) AS DATA_EMBALADO,      
- CAST(HSP10.DATA_HORA AS datetime) AS DATA_DUPLOCHECK,      
- CAST(ISNULL(LV.DATA_DIGITACAO,HSP3.DATA_HORA) AS datetime) AS DATA_FATURAMENTO,      
- CAST(ISNULL(HSP5.DATA_HORA,HSP6.DATA_HORA) AS datetime) AS DATA_EXPEDIDO,      
- CASE WHEN HSP4.DATA_HORA IS NOT NULL THEN 'CANCELADO' ELSE 'VÁLIDO' END AS STATUS_PEDIDO,      
- MONTH(LP.DATA_VENDA) AS MES,      
- (DAY(LP.DATA_VENDA) + (DATEPART(DW, DATEADD (MONTH, DATEDIFF (MONTH, 0, LP.DATA_VENDA), 0))-1)-1)/7 + 1 AS SEMANA_MES,      
- YEAR (LP.DATA_VENDA)  AS ANO,      
- LNF.NF_NUMERO,      
- LNF.SERIE_NF,      
- LNF.CHAVE_NFE,      
- ISNULL(LV.VALOR_TIKET,LP.VALOR_TOTAL) AS VALOR,      
- LNF.VOLUMES,      
- LNF.PESO_BRUTO,      
- CV.UF as UF_DESTINO,      
- 'RJ' AS UF_ORIGEM   
-FROM (       
-      
-        
-       
- SELECT       
-        
-  'HUB SP' AS SITE,      
-  'ECOMM CRISBARROS' AS GRUPO,      
-  'ECOMMERCE' AS CANAL,      
-  'CRIS BARROS' AS MARCA,      
-  LP.CODIGO_FILIAL_ORIGEM,      
-  c.FILIAL AS NOME_FILIAL_INDICADORES,      
-  LP.PEDIDO,      
-  CASE WHEN MAX(CASE WHEN P.PRODUTO LIKE'12%' THEN 1 ELSE 0  END) = 1 THEN 'SIM' ELSE 'NAO' END AS POSSUI_JOIAS,      
-  SUM(LPP.QTDE) AS QTDE_TOTAL,      
-  HSP1.DATA_HORA AS DATA_VENDA,      
-  CASE WHEN DIGITACAO_ENCERRADA = 0 THEN 'NAO' ELSE 'SIM' END AS DIGITACAO_ENCERRADA,      
-  CASE WHEN UPPER(LP.FORMA_ENVIO) LIKE '%FARFETCH%'  THEN 'SIM' ELSE 'NAO'   END AS TIPO_FARFETH,      
-  UPPER(LP.FORMA_ENVIO) AS TRANSPORTADORA,      
-  LP.VALOR_TOTAL,      
-  MAX(CAST(LPP.DATA_PREVISAO_ENTREGA AS DATE)) AS DATA_PREVISAO_ENTREGA,      
-  LP.PEDIDO_SITE      
-       
-       
-        
- FROM [LOJA_PEDIDO] LP (NOLOCK)      
-        
-        
- JOIN [LOJA_PEDIDO_PRODUTO] LPP (NOLOCK)      
- ON LPP.PEDIDO = LP.PEDIDO        
- AND LPP.PRODUTO <>'99999999'      
- AND LPP.QTDE > 0      
- AND LPP.CODIGO_FILIAL_ORIGEM = LP.CODIGO_FILIAL_ORIGEM      
-      
-JOIN [192.168.9.200].[SOMA].[DBO].[PRODUTOS]  AS P WITH (NOLOCK)  
- ON LPP.PRODUTO COLLATE SQL_Latin1_General_CP1_CI_AS = P.PRODUTO    
-     
-JOIN [192.168.9.200].[SOMA].[DBO].[LOJAS_REDE] AS R WITH (NOLOCK)  
- ON R.REDE_LOJAS = P.REDE_LOJAS      
-    
-JOIN [192.168.9.200].[SOMA].[DBO].[FILIAIS] AS C WITH (NOLOCK)  
- ON LP.CODIGO_FILIAL_ORIGEM COLLATE SQL_Latin1_General_CP1_CI_AS = C.COD_FILIAL  
-      
-JOIN [SS_HISTORICO_STATUS_LOJA_PEDIDO] HSP1 (NOLOCK)      
-  ON HSP1.PEDIDO = LP.PEDIDO      
-  AND HSP1.CODIGO_STATUS_PEDIDO = 1 /*INICIO SEPARACAO*/      
-  AND HSP1.CODIGO_FILIAL_ORIGEM = LP.CODIGO_FILIAL_ORIGEM      
-      
-WHERE CAST(ISNULL(LP.DATA_HORA_VENDA,LP.DATA) AS DATE) >= @DATAINICIO AND CAST(ISNULL(LP.DATA_HORA_VENDA,LP.DATA) AS DATE) <= @DATAFIM      
-AND LPP.PRODUTO <> '888888' AND LP.ATG_INDICA_PRE_VENDA <> '1'      
-         
-GROUP BY      
-  R.DESC_REDE_LOJAS,      
-  LP.CODIGO_FILIAL_ORIGEM,      
-  C.FILIAL,      
-  LP.PEDIDO,      
-  HSP1.DATA_HORA,      
-  CASE WHEN DIGITACAO_ENCERRADA = 0 THEN 'NAO' ELSE 'SIM' END ,      
-  CASE WHEN UPPER(LP.FORMA_ENVIO) LIKE '%FARFETCH%'  THEN 'SIM' ELSE 'NAO'   END ,      
-  UPPER(LP.FORMA_ENVIO) ,      
-  LP.VALOR_TOTAL,      
-  LP.PEDIDO_SITE      
-          
-   )LP      
-      
-LEFT JOIN [SS_HISTORICO_STATUS_LOJA_PEDIDO] HSP2_2 (NOLOCK)      
-  ON HSP2_2.CODIGO_FILIAL_ORIGEM = LP.CODIGO_FILIAL_ORIGEM      
-  AND HSP2_2.PEDIDO = LP.PEDIDO      
-  AND HSP2_2.CODIGO_STATUS_PEDIDO = 2 AND HSP2_2.REIMPRESSAO = 0  /*PICKING LIST EMITIDO*/      
-      
-LEFT JOIN [SS_HISTORICO_STATUS_LOJA_PEDIDO] HSP2_3 (NOLOCK)      
-  ON HSP2_3.CODIGO_FILIAL_ORIGEM = LP.CODIGO_FILIAL_ORIGEM      
-  AND HSP2_3.PEDIDO = LP.PEDIDO      
-  AND HSP2_3.CODIGO_STATUS_PEDIDO = 3 /*EM SEPARACAO*/      
-      
-LEFT JOIN [SS_HISTORICO_STATUS_LOJA_PEDIDO] HSP2 (NOLOCK)      
-  ON HSP2.PEDIDO = LP.PEDIDO      
-  AND HSP2.CODIGO_STATUS_PEDIDO = 4      
-  AND HSP2.CODIGO_FILIAL_ORIGEM = LP.CODIGO_FILIAL_ORIGEM /*EMBALADO*/      
-      
-LEFT JOIN [SS_HISTORICO_STATUS_LOJA_PEDIDO] HSP3 (NOLOCK)        
-  ON HSP3.PEDIDO = LP.PEDIDO      
-  AND HSP3.CODIGO_STATUS_PEDIDO = 5      
-  AND HSP3.REIMPRESSAO = 0        
-  AND HSP3.CODIGO_FILIAL_ORIGEM = LP.CODIGO_FILIAL_ORIGEM /*FATURADO*/      
-      
-LEFT JOIN [SS_HISTORICO_STATUS_LOJA_PEDIDO] HSP4 (NOLOCK)       
-  ON HSP4.PEDIDO = LP.PEDIDO      
-  AND HSP4.CODIGO_STATUS_PEDIDO = 9      
-  AND HSP4.CODIGO_FILIAL_ORIGEM = LP.CODIGO_FILIAL_ORIGEM /*CANCELAMENTO*/      
-        
-LEFT JOIN [SS_HISTORICO_STATUS_LOJA_PEDIDO] HSP5 (NOLOCK)      
-  ON HSP5.PEDIDO = LP.PEDIDO      
-  AND HSP5.CODIGO_STATUS_PEDIDO = 7       
-  AND HSP5.REIMPRESSAO = 0      
-  AND HSP5.CODIGO_FILIAL_ORIGEM = LP.CODIGO_FILIAL_ORIGEM /*EXPEDIDO*/      
-        
-LEFT JOIN [SS_HISTORICO_STATUS_LOJA_PEDIDO] HSP6 (NOLOCK)        
-  ON HSP6.PEDIDO = LP.PEDIDO      
-  AND HSP6.CODIGO_STATUS_PEDIDO = 8      
-  AND HSP6.REIMPRESSAO = 0      
-  AND HSP6.CODIGO_FILIAL_ORIGEM = LP.CODIGO_FILIAL_ORIGEM /*INTEGRADO SITE / TRANSP*/      
-      
-LEFT JOIN [SS_HISTORICO_STATUS_LOJA_PEDIDO] HSP10 (NOLOCK)        
-  ON HSP10.PEDIDO = LP.PEDIDO      
-  AND HSP10.CODIGO_STATUS_PEDIDO = 11      
-  AND HSP10.REIMPRESSAO = 0      
-  AND HSP10.CODIGO_FILIAL_ORIGEM = LP.CODIGO_FILIAL_ORIGEM /*DUPLOCHECK*/      
-      
-      
-LEFT JOIN ( SELECT DISTINCT(PEDIDO) AS PEDIDO, TICKET,DATA_VENDA, CODIGO_FILIAL_ORIGEM FROM [loja_pedido_venda] LPV (NOLOCK) WHERE DATA_VENDA >= @DATAINICIO ) LPV      
-ON LPV.PEDIDO = LP.PEDIDO      
-AND LPV.CODIGO_FILIAL_ORIGEM = LP.CODIGO_FILIAL_ORIGEM      
-           
-LEFT JOIN [loja_venda] LV (NOLOCK)      
-  ON LV.TICKET = LPV.TICKET       
-  AND LPV.DATA_VENDA = LV.DATA_VENDA      
-  AND LV.CODIGO_FILIAL = LP.CODIGO_FILIAL_ORIGEM      
-      
-LEFT JOIN [loja_venda_pgto] LVP (NOLOCK)      
-  ON LV.lancamento_caixa = LVP.lancamento_caixa       
-  AND LV.TERMINAL_PGTO = LVP.TERMINAL      
-  AND LVP.CODIGO_FILIAL = LP.CODIGO_FILIAL_ORIGEM      
-      
-LEFT JOIN [clientes_varejo] CV (NOLOCK)      
-  ON CV.codigo_cliente = LV.codigo_cliente        
-      
-LEFT JOIN [LOJA_NOTA_FISCAL]  LNF (NOLOCK)      
-  ON LNF.nf_numero = LVP.NUMERO_FISCAL_VENDA       
-  AND LNF.EMISSAO = LVP.DATA      
-  AND LNF.CODIGO_FILIAL = LP.CODIGO_FILIAL_ORIGEM 
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE NAME ='FUNC_SS_ROMANEIO_SAIDA')
+BEGIN
+	EXECUTE ('CREATE FUNCTION [dbo].[FUNC_SS_ROMANEIO_SAIDA] () RETURNS VARCHAR(8) AS BEGIN DECLARE @RETORNO VARCHAR(1) return @RETORNO END')
+END
+GO
+ALTER FUNCTION [dbo].[FUNC_SS_ROMANEIO_SAIDA]
+	(
+	 
+	)
+	RETURNS VARCHAR(9)
+AS
+BEGIN
+	/* Tiago Carvalho	- 13/01/2026 - Alterado para não gerar caracter especial no ano*/
+	/* Danilo Aires		- Sintese Soluções - Alterada função para gerar o Romaneio_produto com 8 dígitos, com 9 dígitos esta ocorrendo erro ao pesquisar no Linx POS.*/
+	/* Tiago Carvalho	- Sintese Soluções - Função para gerar o numero de romaneio para a tabela LOJA_SAIDAS*/
+     declare @intDay char(2),
+                  @strRomaneio char(9),
+                  @intCount inT,
+				  @bUtilizaMileSegundos bit = 0 
+
+	if exists (select * from ss_wms_parametros (nolock) where parametro ='UTILIZA_MILESEGUNDO_ROMANEIO_SAIDA' and valor_atual ='.T.')
+	BEGIN
+		SELECT @bUtilizaMileSegundos = 1 
+	END        
+		
+    select @intDay = substring(convert(varchar(12), getdate(), 103), 1, 2)
+
+    select @strRomaneio = char(39 + cast(substring(convert(varchar(12), getdate(), 103), 9, 2) as int))
+							+ char(64 + cast(substring(convert(varchar(12), getdate(), 103), 4, 2) as int)) 
+							+ case when cast('11' as int) < 10 then substring('11', 2, 1) else char(55 + cast('11' as int)) end
+							+ char(65 + convert(char(2), datepart(hh, getdate())))
+							+ right('00' + ltrim(convert(varchar(2), datepart(mi, getdate()))), 2)
+							+ right('00' + ltrim(convert(varchar(2), datepart(ss, getdate()))), 1)
+							+ CASE WHEN @bUtilizaMileSegundos = 0 THEN '' ELSE right('00' + ltrim(convert(varchar(3), datepart(ss, getdate()))), 1) END
+    select @intCount = @intCount + 1
+   
+	return LTRIM(RTRIm(@strRomaneio))
+end
