@@ -2,7 +2,7 @@
 
     1 - se parar o job SPED(000_0110_MIT_PROCESSAR_LF_ERROS_MIT_PROCESSAR_SPED), tem que rodar o ultimo step
 
-    2 - geralmente quem locka o banco é o job lx_processos
+    2 - geralmente quem locka o banco é o job lx_processos(Monitor de entradas)
 
     3 - se a fila de restauração do AG tiver alta, verificar o 9.100 e derrubar quem tiver fudendo o SA
 

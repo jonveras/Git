@@ -3,7 +3,7 @@
 
 --CRIAR LOGIN NO 200 
 --CRIA LOGIN NORMALMENTE COM AS PERMISSOES NECESSÁRIAS(CRIAR COM ACESSO DE LEITURA NA MASTER SEMPRE)
-INSERT INTO ss_acesso_bd VALUES (<login>, <aplicacao>, getdate(), system_user);
+INSERT INTO master.dbo.ss_acesso_bd VALUES (<login>, <aplicacao>, getdate(), system_user);
 
 --EXECUTAR A PROC PARA GERAR O CREATE USER PARA RODAR NO 9.100
 SP_HELP_REVLOGIN 'LOGIN'
