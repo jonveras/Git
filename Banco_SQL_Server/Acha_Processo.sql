@@ -2,14 +2,11 @@
 SELECT 
     o.name AS objeto,
     o.type_desc AS tipo,
-    s.name AS schema_nome,
     m.definition AS texto
 FROM 
     sys.sql_modules m
 JOIN 
     sys.objects o ON m.object_id = o.object_id
-JOIN 
-    sys.schemas s ON o.schema_id = s.schema_id
 WHERE 
     m.definition LIKE '%objeto%'
 ORDER BY 
