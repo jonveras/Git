@@ -48,7 +48,9 @@ WHERE name NOT IN (
     --DBA
     'GUILHERME.ROCHA',
     'JONATHAN.VERAS',
-    'PAULO.TAVARES'
+    'PAULO.TAVARES',
+	'ANIMALE\Grupo Global TI Linx ANM',
+	'FARM\Grupo Global TI Linx FRM'
     --fim
 ) AND sysadmin = 0
 ORDER BY name
@@ -102,7 +104,9 @@ WHERE name NOT IN (
     --DBA
     'GUILHERME.ROCHA',
     'JONATHAN.VERAS',
-    'PAULO.TAVARES'
+    'PAULO.TAVARES',
+	'ANIMALE\Grupo Global TI Linx ANM',
+	'FARM\Grupo Global TI Linx FRM'
     --fim
 ) AND sysadmin = 0
 ORDER BY name
