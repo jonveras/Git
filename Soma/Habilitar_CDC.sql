@@ -28,3 +28,6 @@ GO
 
 -- Verificar a tabela que guarda os dados
 select top 100 * from cdc.dbo_nomedatabela_CT
+
+--Verifica os parametros dos jobs
+EXEC sys.sp_cdc_help_jobs;
