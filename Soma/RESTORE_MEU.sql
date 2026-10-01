@@ -1,0 +1,17 @@
+
+USE [master]
+
+-- Passo 1: Verificar os arquivos dentro do .bak
+RESTORE FILELISTONLY 
+FROM DISK = '\\192.168.9.144\svr-ecomfyiatg2\BACKUP_MSSQL\ECOMMfarmATG\FULL\SRV-ECOM-PRD-01_ECOMMfarmATG_FULL_20261001_033711.bak';
+
+--Passo 2: Faz o restore
+RESTORE DATABASE [FARM_RT] FROM DISK='\\192.168.9.144\svr-ecomfyiatg2\BACKUP_MSSQL\ECOMMfarmATG\FULL\SRV-ECOM-PRD-01_ECOMMfarmATG_FULL_20261001_033711.bak'
+with  
+    RECOVERY,
+	MOVE N'FARM_ATG' TO N'E:\DATA\FARM_ATG_FARM_RT.mdf',
+	MOVE N'FARM_ATG_log' TO N'E:\LOG\FARM_ATG_log_FARM_RT.ldf',
+	stats =10;
+   go
+
+DBCC CHECKDB('FARM_RT')
