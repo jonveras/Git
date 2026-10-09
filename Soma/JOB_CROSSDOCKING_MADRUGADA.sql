@@ -1,0 +1,201 @@
+--STEP 1 - JOB_RECALCULO_CAIXA_TETO
+
+SET NOCOUNT ON
+DECLARE 
+    @REDE_LOJAS CHAR(6),
+    @CLIENTE VARCHAR(25),
+    @SEMANA_SALDO INT, 
+    @TETO_SALDO NUMERIC(14,2) ,
+    @SEMANA_AJUSTE CHAR(2), 
+    @CAIXA_AJUSTE VARCHAR(8),
+    @ETAPA INT, 
+    @SEMANA_ATUAL INT = (SELECT SEMANA FROM W_DATAS WHERE DATA = CAST(GETDATE() AS DATE))
+    
+DECLARE CUR_RESERVAS CURSOR FAST_FORWARD FOR  
+    SELECT  A.NOME_CLIFOR,P.REDE_LOJAS,CASE WHEN E.VALOR = 0 THEN 1 ELSE 2 END AS ETAPA
+    FROM VENDAS_PROD_EMBALADO (NOLOCK) A 
+    JOIN VENDAS (NOLOCK)  B ON A.PEDIDO = B.PEDIDO AND B.APROVACAO = 'A'
+    JOIN CADASTRO_CLI_FOR (NOLOCK) C ON A.NOME_CLIFOR  = C.NOME_CLIFOR 
+    JOIN PRODUTOS (NOLOCK) P ON A.PRODUTO = P.PRODUTO
+    JOIN GS_PARAMETROS_DIST (NOLOCK) E ON P.REDE_LOJAS = E.REDE_LOJAS AND E.PARAMETRO = 'LIBERAR ETAPA 2'
+    WHERE   A.FILIAL = 'ESTOQUE ATACADO' 
+			--AND A.NOME_CLIFOR = 'ESPAÇO LORD'
+            AND CAIXA IS NOT NULL
+            AND B.COLECAO IN ( 
+                    SELECT COLECAO_1 AS COLECAO FROM GS_COLECOES_FRETE_LINXWEB WHERE COLECAO_FATURA = 1 AND COLECAO_INATIVA = 0
+                    UNION 
+                    SELECT COLECAO_2 FROM GS_COLECOES_FRETE_LINXWEB WHERE COLECAO_FATURA = 1 AND COLECAO_INATIVA = 0 AND 2 = CASE WHEN E.VALOR = 0 THEN 1 ELSE 2 END
+                )  
+            AND ISNUMERIC(  CASE 
+                                WHEN C.REF_ANTERIOR = 'SITE' THEN 'EC'
+                                WHEN LEFT(RTRIM(CAIXA_VIRTUAL),2)  = 'GQ' THEN 'GQ'
+                                WHEN RIGHT(RTRIM(CAIXA_VIRTUAL),1) = 'X'  THEN 'X'
+                                WHEN LEFT(RTRIM(CAIXA_VIRTUAL),1)  = 'F'  THEN 'F'
+                                ELSE RIGHT(RTRIM(CAIXA_VIRTUAL),2) 
+                            END) = 1
+            AND CASE 
+                    WHEN C.REF_ANTERIOR = 'SITE' THEN 'EC'
+                    WHEN LEFT(RTRIM(CAIXA_VIRTUAL),2)  = 'GQ' THEN 'GQ'
+                    WHEN RIGHT(RTRIM(CAIXA_VIRTUAL),1) = 'X' THEN 'X'
+                    WHEN LEFT(RTRIM(CAIXA_VIRTUAL),1)  = 'F' THEN 'F'
+                    ELSE RIGHT(RTRIM(CAIXA_VIRTUAL),2) 
+                END > @SEMANA_ATUAL
+    GROUP BY A.NOME_CLIFOR,P.REDE_LOJAS,CASE WHEN E.VALOR = 0 THEN 1 ELSE 2 END
+    ORDER BY A.NOME_CLIFOR,P.REDE_LOJAS
+OPEN CUR_RESERVAS       
+FETCH NEXT FROM CUR_RESERVAS INTO @CLIENTE, @REDE_LOJAS, @ETAPA        
+WHILE @@FETCH_STATUS = 0     
+BEGIN
+	PRINT 'CLIENTE INICIO: ' + @CLIENTE
+	SET @SEMANA_SALDO = NULL
+	SET @TETO_SALDO = NULL
+    SELECT TOP 1 @SEMANA_SALDO = SEMANA,@TETO_SALDO = TETO_SEMANAL FROM dbo.FN_TETO_CLIENTE_ATACADO_SEMANAL_NEW_2_0(@REDE_LOJAS,0,@CLIENTE,0) WHERE ETAPA = '1' AND TETO_SEMANAL > 0 ORDER BY SEMANA
+    PRINT @CLIENTE + 'SEMANA SALDO: ' + IIF(@SEMANA_SALDO IS NULL, 'VAZIO', CAST(@SEMANA_SALDO AS VARCHAR(10)))
+	PRINT @CLIENTE + 'TETO SALDO: ' + IIF(@TETO_SALDO IS NULL, 'VAZIO', CAST(@TETO_SALDO AS VARCHAR(10)))
+	
+	WHILE EXISTS(
+            SELECT 
+                CASE 
+                    WHEN C.REF_ANTERIOR = 'SITE'              THEN 'EC'
+                    WHEN LEFT(RTRIM(CAIXA_VIRTUAL),2)  = 'GQ' THEN 'GQ'
+                    WHEN RIGHT(RTRIM(CAIXA_VIRTUAL),1) = 'X'  THEN 'X'
+                    WHEN LEFT(RTRIM(CAIXA_VIRTUAL),1)  = 'F'  THEN 'F'
+                    ELSE RIGHT(RTRIM(CAIXA_VIRTUAL),2) 
+                END, 
+                A.CAIXA,
+                SUM(A.VALOR_EMBALADO) VALOR,
+                SUM(QTDE_EMBALADA) QTDE
+            FROM VENDAS_PROD_EMBALADO (NOLOCK) A 
+            JOIN FATURAMENTO_CAIXAS (NOLOCK) FC ON A.CAIXA = FC.CAIXA AND ISNULL(FC.FATURAMENTO_LIBERADO,0) = 0 AND ISNULL(FC.FATURAMENTO_LIBERADO_AGENDADO,0) = 0
+            JOIN VENDAS (NOLOCK)  B ON A.PEDIDO = B.PEDIDO AND B.APROVACAO = 'A'
+            JOIN CADASTRO_CLI_FOR (NOLOCK)  C ON A.NOME_CLIFOR  = C.NOME_CLIFOR 
+            JOIN PRODUTOS (NOLOCK) P ON A.PRODUTO = P.PRODUTO
+            JOIN GS_PARAMETROS_DIST (NOLOCK) E ON P.REDE_LOJAS = E.REDE_LOJAS AND E.PARAMETRO = 'LIBERAR ETAPA 2'
+            WHERE   A.FILIAL = 'ESTOQUE ATACADO' 
+                    AND A.CAIXA IS NOT NULL 
+                    AND A.NOME_CLIFOR = @CLIENTE 
+                    AND P.REDE_LOJAS = @REDE_LOJAS
+                    AND B.COLECAO IN (
+                            SELECT COLECAO_1 AS COLECAO FROM GS_COLECOES_FRETE_LINXWEB WHERE COLECAO_FATURA = 1 AND COLECAO_INATIVA = 0
+                            UNION 
+                            SELECT COLECAO_2 FROM GS_COLECOES_FRETE_LINXWEB WHERE COLECAO_FATURA = 1 AND COLECAO_INATIVA = 0 AND 2 = CASE WHEN E.VALOR = 0 THEN 1 ELSE 2 END)  
+                    AND ISNUMERIC(  CASE 
+                                        WHEN C.REF_ANTERIOR = 'SITE' THEN 'EC'
+                                        WHEN LEFT(RTRIM(CAIXA_VIRTUAL),2)  = 'GQ' THEN 'GQ'
+                                        WHEN RIGHT(RTRIM(CAIXA_VIRTUAL),1) = 'X' THEN 'X'
+                                        WHEN LEFT(RTRIM(CAIXA_VIRTUAL),1)  = 'F' THEN 'F'
+                                        ELSE RIGHT(RTRIM(CAIXA_VIRTUAL),2) 
+                                    END)= 1
+                    AND CASE 
+                            WHEN C.REF_ANTERIOR = 'SITE'               THEN 'EC'
+                            WHEN LEFT(RTRIM(CAIXA_VIRTUAL),2)  = 'GQ' THEN 'GQ'
+                            WHEN RIGHT(RTRIM(CAIXA_VIRTUAL),1) = 'X'  THEN 'X'
+                            WHEN LEFT(RTRIM(CAIXA_VIRTUAL),1)  = 'F'  THEN 'F'
+                            ELSE RIGHT(RTRIM(CAIXA_VIRTUAL),2) 
+                        END > @SEMANA_SALDO 
+            GROUP BY 
+                CASE 
+                    WHEN C.REF_ANTERIOR = 'SITE'              THEN 'EC'
+                    WHEN LEFT(RTRIM(CAIXA_VIRTUAL),2)  = 'GQ' THEN 'GQ'
+                    WHEN RIGHT(RTRIM(CAIXA_VIRTUAL),1) = 'X'  THEN 'X'
+                    WHEN LEFT(RTRIM(CAIXA_VIRTUAL),1)  = 'F'  THEN 'F'
+                    ELSE RIGHT(RTRIM(CAIXA_VIRTUAL),2) 
+                END,
+                A.CAIXA
+            HAVING SUM(A.VALOR_EMBALADO) <= @TETO_SALDO
+            )
+        BEGIN 
+			PRINT 'CLIENTE ENTROU NO WHILE: ' + @CLIENTE
+			PRINT @CLIENTE + 'SEMANA SALDO NO WHILE: ' + IIF(@SEMANA_SALDO IS NULL, 'VAZIO', CAST(@SEMANA_SALDO AS VARCHAR(10)))
+			PRINT @CLIENTE + 'TETO SALDO NO WHILE: ' + IIF(@TETO_SALDO IS NULL, 'VAZIO', CAST(@TETO_SALDO AS VARCHAR(10)))
+
+			IF (@SEMANA_SALDO IS NULL OR @TETO_SALDO IS NULL)
+			BEGIN
+				PRINT 'CLIENTE COM SEMANA_SALDO OU TETO_SALDO NULO: ' + @CLIENTE
+				BREAK;
+			END
+			
+            SELECT  @SEMANA_AJUSTE =  CASE WHEN C.REF_ANTERIOR = 'SITE' THEN 'EC'
+                                                  WHEN LEFT(RTRIM(CAIXA_VIRTUAL),2)  = 'GQ' THEN 'GQ'
+                                                  WHEN RIGHT(RTRIM(CAIXA_VIRTUAL),1) = 'X'  THEN 'X'
+                                                  WHEN LEFT(RTRIM(CAIXA_VIRTUAL),1)  = 'F'  THEN 'F'
+                                             ELSE RIGHT(RTRIM(CAIXA_VIRTUAL),2) END, 
+                    @CAIXA_AJUSTE = A.CAIXA
+                    --SUM(A.VALOR_EMBALADO) VALOR,SUM(QTDE_EMBALADA) QTDE
+            FROM VENDAS_PROD_EMBALADO (NOLOCK) A
+            JOIN FATURAMENTO_CAIXAS (NOLOCK) FC ON A.CAIXA = FC.CAIXA AND ISNULL(FC.FATURAMENTO_LIBERADO,0) = 0 AND ISNULL(FC.FATURAMENTO_LIBERADO_AGENDADO,0) = 0
+            JOIN VENDAS (NOLOCK)  B ON A.PEDIDO = B.PEDIDO AND B.APROVACAO = 'A'
+            JOIN CADASTRO_CLI_FOR (NOLOCK)  C ON A.NOME_CLIFOR  = C.NOME_CLIFOR 
+            JOIN PRODUTOS (NOLOCK) P ON A.PRODUTO = P.PRODUTO
+            JOIN GS_PARAMETROS_DIST (NOLOCK) E ON P.REDE_LOJAS = E.REDE_LOJAS AND E.PARAMETRO = 'LIBERAR ETAPA 2'
+            WHERE   A.FILIAL = 'ESTOQUE ATACADO' 
+                    AND A.CAIXA IS NOT NULL 
+                    AND A.NOME_CLIFOR = @CLIENTE  
+                    AND P.REDE_LOJAS = @REDE_LOJAS
+                    AND B.COLECAO IN (
+                            SELECT COLECAO_1 AS COLECAO FROM GS_COLECOES_FRETE_LINXWEB WHERE COLECAO_FATURA = 1 AND COLECAO_INATIVA = 0
+                            UNION 
+                            SELECT COLECAO_2 FROM GS_COLECOES_FRETE_LINXWEB WHERE COLECAO_FATURA = 1 AND COLECAO_INATIVA = 0 AND 2 = CASE WHEN E.VALOR = 0 THEN 1 ELSE 2 END
+                         )  
+                    AND ISNUMERIC(  CASE 
+                                        WHEN C.REF_ANTERIOR = 'SITE'              THEN 'EC'
+                                        WHEN LEFT(RTRIM(CAIXA_VIRTUAL),2)  = 'GQ' THEN 'GQ'
+                                        WHEN RIGHT(RTRIM(CAIXA_VIRTUAL),1) = 'X'  THEN 'X'
+                                        WHEN LEFT(RTRIM(CAIXA_VIRTUAL),1)  = 'F'  THEN 'F'
+                                        ELSE RIGHT(RTRIM(CAIXA_VIRTUAL),2) 
+                                    END)= 1
+                    AND CASE 
+                            WHEN C.REF_ANTERIOR = 'SITE'               THEN 'EC'
+                            WHEN LEFT(RTRIM(CAIXA_VIRTUAL),2)  = 'GQ' THEN 'GQ'
+                            WHEN RIGHT(RTRIM(CAIXA_VIRTUAL),1) = 'X'  THEN 'X'
+                            WHEN LEFT(RTRIM(CAIXA_VIRTUAL),1)  = 'F'  THEN 'F'
+                            ELSE RIGHT(RTRIM(CAIXA_VIRTUAL),2) 
+                        END > @SEMANA_SALDO
+            GROUP BY 
+                CASE 
+                    WHEN C.REF_ANTERIOR = 'SITE' THEN 'EC'
+                    WHEN LEFT(RTRIM(CAIXA_VIRTUAL),2)  = 'GQ' THEN 'GQ'
+                    WHEN RIGHT(RTRIM(CAIXA_VIRTUAL),1) = 'X'  THEN 'X'
+                    WHEN LEFT(RTRIM(CAIXA_VIRTUAL),1)  = 'F'  THEN 'F'
+                    ELSE RIGHT(RTRIM(CAIXA_VIRTUAL),2) 
+                END,
+                A.CAIXA
+            HAVING SUM(A.VALOR_EMBALADO) <= @TETO_SALDO 
+            ORDER BY    SUM(QTDE_EMBALADA)  DESC,
+                        CASE 
+                            WHEN C.REF_ANTERIOR = 'SITE'              THEN 'EC'
+                            WHEN LEFT(RTRIM(CAIXA_VIRTUAL),2)  = 'GQ' THEN 'GQ'
+                            WHEN RIGHT(RTRIM(CAIXA_VIRTUAL),1) = 'X'  THEN 'X'
+                            WHEN LEFT(RTRIM(CAIXA_VIRTUAL),1)  = 'F'  THEN 'F'
+                            ELSE RIGHT(RTRIM(CAIXA_VIRTUAL),2) 
+                        END DESC
+            OPTION (USE HINT ('FORCE_DEFAULT_CARDINALITY_ESTIMATION'))
+                                        
+            UPDATE A 
+            SET A.CAIXA_VIRTUAL = REPLACE(A.CAIXA_VIRTUAL,'-'+RTRIM(@SEMANA_AJUSTE),'-'+RIGHT('00'+RTRIM(CAST(@SEMANA_SALDO AS CHAR(2))),2))  
+            FROM VENDAS_PROD_EMBALADO A 
+            JOIN FATURAMENTO_CAIXAS (NOLOCK) B ON A.CAIXA = B.CAIXA
+            WHERE   A.CAIXA = @CAIXA_AJUSTE
+                    AND ISNULL(B.FATURAMENTO_LIBERADO,0) = 0 AND ISNULL(B.FATURAMENTO_LIBERADO_AGENDADO,0) = 0
+	        OPTION (RECOMPILE)
+                    
+            UPDATE A 
+            SET GRUPO_DE_CAIXAS = RTRIM(B.CAIXA_VIRTUAL)+'|' 
+            FROM FATURAMENTO_CAIXAS A 
+            LEFT JOIN FILIAIS (NOLOCK) D ON A.NOME_CLIFOR = D.FILIAL AND D.TIPO_FILIAL IN ('FÁBRICA/ESTOQUE','LOJA VAREJO')
+            JOIN CADASTRO_CLI_FOR (NOLOCK) CF ON A.NOME_CLIFOR = CF.NOME_CLIFOR AND ISNULL(CF.REF_ANTERIOR,'') <> 'SITE'
+            JOIN VENDAS_PROD_EMBALADO (NOLOCK) B ON A.CAIXA = B.CAIXA 
+            JOIN PRODUTOS (NOLOCK) C ON B.PRODUTO = C.PRODUTO 
+            WHERE   A.CAIXA = @CAIXA_AJUSTE
+                    AND (RTRIM(A.GRUPO_DE_CAIXAS) <> RTRIM(B.CAIXA_VIRTUAL)+'|' OR ISNULL(A.GRUPO_DE_CAIXAS,'') = '')
+                    AND ISNULL(A.FATURAMENTO_LIBERADO,0) = 0 AND ISNULL(A.FATURAMENTO_LIBERADO_AGENDADO,0) = 0
+	        OPTION (RECOMPILE)            
+
+            SELECT TOP 1 @SEMANA_SALDO = SEMANA,@TETO_SALDO = TETO_SEMANAL FROM dbo.FN_TETO_CLIENTE_ATACADO_SEMANAL_NEW_2_0(@REDE_LOJAS,0,@CLIENTE,0) WHERE ETAPA >= @ETAPA AND TETO_SEMANAL > 0 ORDER BY SEMANA
+			PRINT 'CLIENTE FIM WHILE: ' + @CLIENTE
+	END 
+	PRINT 'CLIENTE FIM: ' + @CLIENTE
+    FETCH NEXT FROM CUR_RESERVAS INTO @CLIENTE, @REDE_LOJAS , @ETAPA  
+END
+CLOSE CUR_RESERVAS    
+DEALLOCATE CUR_RESERVAS
