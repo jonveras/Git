@@ -1,286 +1,594 @@
 USE [SOMA]
 GO
 
-/****** Object:  Trigger [dbo].[LXU_ANM_CTB_LANCAMENTO_ITEM]    Script Date: 28/07/2026 15:29:40 ******/
+/****** Object:  StoredProcedure [dbo].[CSM_CRIA_NOTA_SERVICO]    Script Date: 09/10/2026 16:59:09 ******/
 SET ANSI_NULLS ON
 GO
 
 SET QUOTED_IDENTIFIER ON
 GO
 
+CREATE procedure [dbo].[CSM_CRIA_NOTA_SERVICO] AS
 
-CREATE TRIGGER [dbo].[LXU_ANM_CTB_LANCAMENTO_ITEM] 
-ON [dbo].[CTB_LANCAMENTO_ITEM]
-FOR UPDATE NOT FOR REPLICATION
-AS 
+-- chamado  4498312 RAFAEL.GOMES
+declare @mensagem varchar(500), @ID_NOTA INT, @pedido varchar(20), @valor_planilha decimal(15,2),
+        @filial varchar(25), @valor_nota decimal(15,2), @nf_numero varchar(12), @serie_nf varchar(10), @LEN INT, @TIPO_FAT VARCHAR(40), @natureza varchar(10), @TIPO_FRETE VARCHAR(2), @centro_custo varchar(15)
 
--- 08-09-2025 - GUILHERME.ROCHA - #GS:01.06# - ADICIONADO VARCHAR NA FUNCAO PARA EVITAR SCAN NA TABELA.
--- 09-12-2018 - LPR - #GS:01.05# - VOLTANDO A TRAVA.
--- 05-12-2018 - LPR - #GS:01.04# - RETIRANDO A TRAVA  - SOLICITACAO CLAUDIA
--- 19-11-2018 - LPR - #GS:01.03# - VOLTANDO A TRAVA 
--- 05-11-2018 - LPR - #GS:01.02# - RETIRANDO A TRAVA 
--- 10/10/2018 - LPR - /*GS:01.01*/ - IMPLANTACAO DO TRATAMENTO DAS CONTAS DE MUTUO PARA A MESMA MATRIZ CONTABIL - SOLICITAÇÃO IVANA
--- 12-04-2018 - LPR - #GS:01.02# - Inclusão do (nolock)
--- 29-01-2018 - LPR - #GS:01.01# - Retirando '*' 
--- UPDATE Trigger On LXU_ANM_CTB_LANCAMENTO_ITEM
+set @filial = 'GRUPO SOMA BOTAFOGO CM'
+set @serie_nf = '152' 
+SET @TIPO_FAT = 'LICENCIADOS FARM'
+set @natureza = '102.01'
+SET @TIPO_FRETE = '9'
 
+DECLARE CUR_PED CURSOR LOCAL FAST_FORWARD FOR
+	select id_nota, PEDIDO_FARM, TOTAL_NF, centro_custo from CSM_NOTAS_SERVICO where nf_saida is null
+
+open CUR_PED
+
+FETCH NEXT FROM CUR_PED INTO @ID_NOTA, @pedido, @valor_planilha, @centro_custo 
+
+WHILE @@FETCH_STATUS = 0
 BEGIN
+    set @valor_nota = @valor_planilha / 2
+
+	begin transaction
+    SELECT @LEN = LEN(SEQUENCIAL), @nf_numero  = REPLICATE('0', @LEN - LEN(CAST(SEQUENCIAL+1 AS VARCHAR))) + CAST(SEQUENCIAL+1 AS VARCHAR) FROM FATURAMENTO_SEQUENCIAIS WHERE SERIE_NF=@SERIE_NF AND FILIAL=@FILIAL;
+
+    UPDATE FATURAMENTO_SEQUENCIAIS SET SEQUENCIAL=@nf_numero WHERE FILIAL=@FILIAL AND SERIE_NF=@SERIE_NF;
+
+    begin try
+		INSERT INTO [dbo].[FATURAMENTO]
+           ([FILIAL]
+           ,[NF_SAIDA]
+           ,[SERIE_NF]
+           ,[CODIGO_LOCAL_ENTREGA]
+           ,[FILIAL_FATURADA]
+           ,[TIPO_FATURAMENTO]
+           ,[LANCAMENTO]
+           ,[NOME_CLIFOR]
+           ,[CONDICAO_PGTO]
+           ,[NATUREZA_SAIDA]
+           ,[TRANSPORTADORA]
+           ,[TRANSP_REDESPACHO]
+           ,[TIPO_FRETE]
+           ,[COD_TRANSACAO]
+           ,[EMISSAO]
+           ,[DATA_SAIDA]
+           ,[FRETE]
+           ,[SEGURO]
+           ,[DESCONTO]
+           ,[DESCONTO_COND_PGTO]
+           ,[ENCARGO]
+           ,[ICMS]
+           ,[IPI_VALOR]
+           ,[VALOR_TOTAL]
+           ,[QTDE_TOTAL]
+           ,[NF_FATURA]
+           ,[FATURA]
+           ,[NOTA_IMPRESSA]
+           ,[ACERTO_CONTAS_P_R]
+           ,[TABELA_FILHA]
+           ,[OBS]
+           ,[PESO_LIQUIDO]
+           ,[PESO_BRUTO]
+           ,[VOLUMES]
+           ,[TIPO_VOLUME]
+           ,[CONFERIDO]
+           ,[CONFERIDO_POR]
+           ,[ENTREGA_CIF]
+           ,[IRRF]
+           ,[IRRF_RET_FONTE]
+           ,[NOTA_CANCELADA]
+           ,[DEVOLUCAO]
+           ,[REPRESENTANTE]
+           ,[COMISSAO]
+           ,[PORCENTAGEM_ACERTO]
+           ,[GERENTE]
+           ,[COMISSAO_GERENTE]
+           ,[DESCONTO_BRUTO]
+           ,[TIMESTAMP]
+           ,[CONFERENCIA]
+           ,[MARCA_EXPORTACAO]
+           ,[ATUALIZACAO_EXPORTAR]
+           ,[DATA_EXPORTACAO]
+           ,[ICMS_BASE]
+           ,[STATUS_TRANSITO]
+           ,[DATA_CANCELAMENTO]
+           ,[VALOR_CANCELADO]
+           ,[QTDE_CANCELADA]
+           ,[MOEDA]
+           ,[CAMBIO_NA_DATA]
+           ,[COBRAR_MOEDA_PADRAO]
+           ,[DATA_FATURAMENTO_RELATIVO]
+           ,[RECARGO]
+           ,[DATA_PARA_TRANSFERENCIA]
+           ,[NOME_CLIFOR_ENTREGA]
+           ,[TABELA_PRECO_FRETE]
+           ,[VALOR_FRETE]
+           ,[NOME_CLIFOR_COBRANCA]
+           ,[VALOR_ADICIONAL]
+           ,[IPI_ADICIONAL]
+           ,[OBS_TRANSPORTE]
+           ,[AGRUPAMENTO_ITENS]
+           ,[COMISSAO_VALOR]
+           ,[COMISSAO_VALOR_GERENTE]
+           ,[CTB_ITEM]
+           ,[CTB_LANCAMENTO]
+           ,[DESCONTO_BRUTO_1]
+           ,[DESCONTO_BRUTO_2]
+           ,[DESCONTO_BRUTO_3]
+           ,[DESCONTO_BRUTO_4]
+           ,[DESCONTO_SOBRE_1]
+           ,[DESCONTO_SOBRE_2]
+           ,[DESCONTO_SOBRE_3]
+           ,[DESCONTO_SOBRE_4]
+           ,[EMPRESA]
+           ,[FATURA_FILIAL]
+           ,[FATURA_NUMERO]
+           ,[FATURA_SERIE]
+           ,[ICMS_ISENTO]
+           ,[ICMS_OUTROS]
+           ,[MPADRAO_DESCONTO]
+           ,[MPADRAO_DESCONTO_COND_PGTO]
+           ,[MPADRAO_ENCARGO]
+           ,[MPADRAO_FRETE]
+           ,[MPADRAO_IMPOSTO_AGREGAR]
+           ,[MPADRAO_SEGURO]
+           ,[MPADRAO_VALOR_SUB_ITENS]
+           ,[MPADRAO_VALOR_TOTAL]
+           ,[MULTI_DESCONTO_ACUMULAR]
+           ,[NUMERO_CONFERENCIA]
+           ,[PORC_DESCONTO]
+           ,[PORC_DESCONTO_BRUTO]
+           ,[PORC_DESCONTO_COND_PGTO]
+           ,[PORC_DESCONTO_DIGITADO]
+           ,[PORC_ENCARGO]
+           ,[RATEIO_CENTRO_CUSTO]
+           ,[RATEIO_FILIAL]
+           ,[VALOR_DIFERENCA_GUIA_FATURA]
+           ,[VALOR_IMPOSTO_AGREGAR]
+           ,[VALOR_SUB_ITENS]
+           ,[IMPRIMIR_ENDERECO_COBRANCA]
+           ,[INDICA_CONSUMIDOR_FINAL]
+           ,[BANCO]
+           ,[AGENCIA]
+           ,[RESPONSAVEL_TRANSPORTE]
+           ,[NOTA_COMPLEMENTAR]
+           ,[NUMERO_CONHECIMENTO_RELACIONADO]
+           ,[PORC_DESCONTO_SEFAZ]
+           ,[DESCONTO_SEFAZ]
+           ,[MPADRAO_DESCONTO_SEFAZ]
+           ,[ID_CAIXA_PGTO]
+           ,[NRO_DE]
+           ,[DATA_DE]
+           ,[NATUREZA_EXPORTACAO]
+           ,[NRO_RE]
+           ,[DATA_RE]
+           ,[NRO_CONHECIMENTO_EMBARQUE]
+           ,[DATA_CONHECIMENTO]
+           ,[TIPO_CONHECIMENTO]
+           ,[COD_PAIS]
+           ,[NRO_COMPROVANTE_EXPORTACAO]
+           ,[DATA_COMPROVANTE_EXPORTACAO]
+           ,[DATA_AVERBACAO]
+           ,[NF_EMITIDA_EXPORTADOR]
+           ,[COD_RELACIONAMENTO_RE_NF]
+           ,[NF_E_NUMERO]
+           ,[NF_E_DATA_EMISSAO]
+           ,[NF_E_COD_VERIFICACAO]
+           ,[NF_E_DATA_QUITACAO_GUIA]
+           ,[NF_E_GERACAO]
+           ,[SEQUENCIAL_UNICO]
+           ,[DATA_GERACAO_NSU]
+           ,[CODIGO_CLIENTE_VAREJO]
+           ,[PIN]
+           ,[CHAVE_NFE]
+           ,[PROTOCOLO_AUTORIZACAO_NFE]
+           ,[PROTOCOLO_CANCELAMENTO_NFE]
+           ,[DATA_AUTORIZACAO_NFE]
+           ,[GERAR_AUTOMATICO]
+           ,[STATUS_NFE]
+           ,[LOG_STATUS_NFE]
+           ,[MOTIVO_CANCELAMENTO_NFE]
+           ,[ITEM_NFE]
+           ,[PRIORIZACAO]
+           ,[REGISTRO_DPEC]
+           ,[DATA_REGISTRO_DPEC]
+           ,[TIPO_EMISSAO_NFE]
+           ,[FIN_EMISSAO_NFE]
+           ,[COD_MOTIVO_CANC]
+           ,[OBS_INTERESSE_FISCO]
+           ,[DATA_CONTINGENCIA]
+           ,[JUSTIFICATIVA_CONTINGENCIA]
+           ,[UF_EMBARQUE_EXPORTACAO]
+           ,[LOCAL_EMBARQUE_EXPORTACAO]
+           ,[CFOP_CANCELAMENTO]
+           ,[VALOR_DESPACHO]
+           ,[VALOR_IMPOSTO_INCIDENCIA]
+           ,[MPADRAO_VALOR_IMPOSTO_INCIDENCIA]
+           ,[VEICULO_PLACA]
+           ,[UF_PLACA_VEICULO]
+           ,[MARCA_VOLUMES]
+           ,[NUMERACAO_VOLUMES]
+           ,[INFORMACAO_COMPLEMENTAR]
+           ,[DATA_HORA_EMISSAO]
+           ,[INDICA_PRESENCA_COMPRADOR]
+           ,[LOCAL_DESPACHO_EXPORTACAO]
+           ,[UTC_DATA_AUTORIZACAO_NFE]
+           ,[UTC_DATA_SAIDA]
+           ,[UTC_EMISSAO]
+           ,[INDICA_ENDERECO_ENTREGA]
+           ,[CONSTRUCAO_CIVIL]
+           ,[CADASTRO_CNO]
+           ,[INFO_PGTO]
+           ,[TIPO_DOC_EXPORTACAO]
+           ,[ID_INTERMEDIADOR]
+           ,[DESC_MEIO_PGTO]
+           ,[ID_PROCESSO]
+           ,[NOME_LOCAL_RETIRADA]
+           ,[UTILIZA_ENTREGA]
+           ,[NF_DISTRIBUICAO_EMPREGADOS]
+           ,[DATA_PAGAMENTO]
+           ,[AUTORIZACAO])
+		SELECT
+            FILIAL	= @FILIAL
+            ,NF_SAIDA	= @nf_numero
+            ,SERIE_NF	= @SERIE_NF
+            ,CODIGO_LOCAL_ENTREGA	= NULL
+            ,FILIAL_FATURADA	= NULL
+            ,TIPO_FATURAMENTO	= @TIPO_FAT
+            ,LANCAMENTO	= NULL
+            ,NOME_CLIFOR	=  A.CLIENTE_ATACADO
+            ,CONDICAO_PGTO	=  a.CONDICAO_PGTO
+            ,NATUREZA_SAIDA	= @natureza
+            ,TRANSPORTADORA	= null
+            ,TRANSP_REDESPACHO	= null
+            ,TIPO_FRETE	= @TIPO_FRETE
+            ,COD_TRANSACAO	= 'FATURAMENTO_023'
+            ,EMISSAO	= CAST(CAST(GETDATE() AS DATE)AS DATETIME)
+            ,DATA_SAIDA	= CAST(CAST(GETDATE() AS DATE)AS DATETIME)
+            ,FRETE	= 0 
+            ,SEGURO	= 0
+            ,DESCONTO	= 0
+            ,DESCONTO_COND_PGTO	= 0
+            ,ENCARGO	= 0
+            ,ICMS	= 0
+            ,IPI_VALOR	= 0
+            ,VALOR_TOTAL	= @valor_nota
+            ,QTDE_TOTAL	= 1
+            ,NF_FATURA	= 0
+            ,FATURA	= NULL
+            ,NOTA_IMPRESSA	= 0
+            ,ACERTO_CONTAS_P_R	= 0
+            ,TABELA_FILHA	= 'FATURAMENTO_ITEM'
+            ,OBS	= NULL
+            ,PESO_LIQUIDO	= 1
+            ,PESO_BRUTO	= 1
+            ,VOLUMES	= 1
+            ,TIPO_VOLUME	= 'VOLUMES' 
+            ,CONFERIDO	= 0
+            ,CONFERIDO_POR	= NULL
+            ,ENTREGA_CIF	= 9
+            ,IRRF	= 0
+            ,IRRF_RET_FONTE	= 0
+            ,NOTA_CANCELADA	= 0
+            ,DEVOLUCAO	= 0
+            ,REPRESENTANTE	= a.REPRESENTANTE
+            ,COMISSAO	= a.COMISSAO
+            ,PORCENTAGEM_ACERTO	= 0
+            ,GERENTE	= a.GERENTE
+            ,COMISSAO_GERENTE	= a.COMISSAO_GERENTE
+            ,DESCONTO_BRUTO	= 0
+            ,TIMESTAMP	= NULL
+            ,CONFERENCIA	= NULL
+            ,MARCA_EXPORTACAO	= NULL
+            ,ATUALIZACAO_EXPORTAR	= NULL
+            ,DATA_EXPORTACAO	= NULL
+            ,ICMS_BASE	= 0
+            ,STATUS_TRANSITO	= NULL
+            ,DATA_CANCELAMENTO	= NULL
+            ,VALOR_CANCELADO	= 0
+            ,QTDE_CANCELADA	= 0
+            ,MOEDA	= 'R$'
+            ,CAMBIO_NA_DATA	= 1
+            ,COBRAR_MOEDA_PADRAO	= 1
+            ,DATA_FATURAMENTO_RELATIVO	= NULL
+            ,RECARGO	= 0
+            ,DATA_PARA_TRANSFERENCIA	= GETDATE()
+            ,NOME_CLIFOR_ENTREGA	= A.CLIENTE_ATACADO
+            ,TABELA_PRECO_FRETE	= 0
+            ,VALOR_FRETE	= 0
+            ,NOME_CLIFOR_COBRANCA	= A.CLIENTE_ATACADO
+            ,VALOR_ADICIONAL	= 0
+            ,IPI_ADICIONAL	= 0
+            ,OBS_TRANSPORTE	= NULL
+            ,AGRUPAMENTO_ITENS	= 0
+            ,COMISSAO_VALOR	= a.COMISSAO_valor
+            ,COMISSAO_VALOR_GERENTE	= a.COMISSAO_VALOR_GERENTE
+            ,CTB_ITEM	= NULL
+            ,CTB_LANCAMENTO	= NULL
+            ,DESCONTO_BRUTO_1	= 0
+            ,DESCONTO_BRUTO_2	= 0
+            ,DESCONTO_BRUTO_3	= 0
+            ,DESCONTO_BRUTO_4	= 0
+            ,DESCONTO_SOBRE_1	= 0
+            ,DESCONTO_SOBRE_2	= 0
+            ,DESCONTO_SOBRE_3	= 0
+            ,DESCONTO_SOBRE_4	= 0
+            ,EMPRESA	=  1
+            ,FATURA_FILIAL	= NULL
+            ,FATURA_NUMERO	= NULL
+            ,FATURA_SERIE	= NULL
+            ,ICMS_ISENTO	= 0
+            ,ICMS_OUTROS	= 0
+            ,MPADRAO_DESCONTO	= 0
+            ,MPADRAO_DESCONTO_COND_PGTO	= 0
+            ,MPADRAO_ENCARGO	= 0
+            ,MPADRAO_FRETE	= 0
+            ,MPADRAO_IMPOSTO_AGREGAR	= 0
+            ,MPADRAO_SEGURO	= 0
+            ,MPADRAO_VALOR_SUB_ITENS	= @valor_nota
+            ,MPADRAO_VALOR_TOTAL	= @valor_nota
+            ,MULTI_DESCONTO_ACUMULAR	= 0
+            ,NUMERO_CONFERENCIA	= NULL
+            ,PORC_DESCONTO	= 0
+            ,PORC_DESCONTO_BRUTO	= 0
+            ,PORC_DESCONTO_COND_PGTO	= 0
+            ,PORC_DESCONTO_DIGITADO	= 0
+            ,PORC_ENCARGO	= 0
+            ,RATEIO_CENTRO_CUSTO	=  @centro_custo
+            ,RATEIO_FILIAL	= '190421'
+            ,VALOR_DIFERENCA_GUIA_FATURA	= 0
+            ,VALOR_IMPOSTO_AGREGAR	= 0
+            ,VALOR_SUB_ITENS	= @valor_nota
+            ,IMPRIMIR_ENDERECO_COBRANCA	= 0
+            ,INDICA_CONSUMIDOR_FINAL	= 0
+            ,BANCO	= NULL
+            ,AGENCIA	= NULL
+            ,RESPONSAVEL_TRANSPORTE	= NULL
+            ,NOTA_COMPLEMENTAR	= 0
+            ,NUMERO_CONHECIMENTO_RELACIONADO	= NULL
+            ,PORC_DESCONTO_SEFAZ	= 0
+            ,DESCONTO_SEFAZ	= 0
+            ,MPADRAO_DESCONTO_SEFAZ	= 0
+            ,ID_CAIXA_PGTO	= NULL
+            ,NRO_DE	= NULL
+            ,DATA_DE	= NULL
+            ,NATUREZA_EXPORTACAO	= NULL
+            ,NRO_RE	= NULL
+            ,DATA_RE	= NULL
+            ,NRO_CONHECIMENTO_EMBARQUE	= NULL
+            ,DATA_CONHECIMENTO	= NULL
+            ,TIPO_CONHECIMENTO	= NULL
+            ,COD_PAIS	= NULL
+            ,NRO_COMPROVANTE_EXPORTACAO	= NULL
+            ,DATA_COMPROVANTE_EXPORTACAO	= NULL
+            ,DATA_AVERBACAO	= NULL
+            ,NF_EMITIDA_EXPORTADOR	= NULL
+            ,COD_RELACIONAMENTO_RE_NF	= NULL
+            ,NF_E_NUMERO	= NULL
+            ,NF_E_DATA_EMISSAO	= NULL
+            ,NF_E_COD_VERIFICACAO	= NULL
+            ,NF_E_DATA_QUITACAO_GUIA	= NULL
+            ,NF_E_GERACAO	= NULL
+            ,SEQUENCIAL_UNICO	= NULL
+            ,DATA_GERACAO_NSU	= NULL
+            ,CODIGO_CLIENTE_VAREJO	= NULL
+            ,PIN	= NULL
+            ,CHAVE_NFE	= NULL
+            ,PROTOCOLO_AUTORIZACAO_NFE	= NULL
+            ,PROTOCOLO_CANCELAMENTO_NFE	= NULL
+            ,DATA_AUTORIZACAO_NFE	= NULL
+            ,GERAR_AUTOMATICO	= 0
+            ,STATUS_NFE	= 1
+            ,LOG_STATUS_NFE	= 0
+            ,MOTIVO_CANCELAMENTO_NFE	= NULL
+            ,ITEM_NFE	= 0
+            ,PRIORIZACAO	= 0
+            ,REGISTRO_DPEC	= 0
+            ,DATA_REGISTRO_DPEC	= NULL
+            ,TIPO_EMISSAO_NFE	= 1
+            ,FIN_EMISSAO_NFE	= 1
+            ,COD_MOTIVO_CANC	= NULL
+            ,OBS_INTERESSE_FISCO	= NULL
+            ,DATA_CONTINGENCIA	= NULL
+            ,JUSTIFICATIVA_CONTINGENCIA	= NULL
+            ,UF_EMBARQUE_EXPORTACAO	= NULL
+            ,LOCAL_EMBARQUE_EXPORTACAO	= NULL
+            ,CFOP_CANCELAMENTO	= NULL
+            ,VALOR_DESPACHO	= 0
+            ,VALOR_IMPOSTO_INCIDENCIA	= 0
+            ,MPADRAO_VALOR_IMPOSTO_INCIDENCIA	= 0
+            ,VEICULO_PLACA	= NULL
+            ,UF_PLACA_VEICULO	= NULL
+            ,MARCA_VOLUMES	= NULL
+            ,NUMERACAO_VOLUMES	= NULL
+            ,INFORMACAO_COMPLEMENTAR	= NULL
+            ,DATA_HORA_EMISSAO	= GETDATE()
+            ,INDICA_PRESENCA_COMPRADOR	= 0
+            ,LOCAL_DESPACHO_EXPORTACAO	= NULL
+            ,UTC_DATA_AUTORIZACAO_NFE	= NULL
+            ,UTC_DATA_SAIDA	= 3
+            ,UTC_EMISSAO	= 3
+            ,INDICA_ENDERECO_ENTREGA	= 0
+            ,CONSTRUCAO_CIVIL	= NULL
+            ,CADASTRO_CNO	= NULL
+            ,INFO_PGTO	= '99'
+            ,TIPO_DOC_EXPORTACAO	= NULL
+            ,ID_INTERMEDIADOR	= NULL
+            ,DESC_MEIO_PGTO	= NULL
+            ,ID_PROCESSO	= NULL
+            ,NOME_LOCAL_RETIRADA	= NULL
+            ,UTILIZA_ENTREGA	= NULL
+            ,NF_DISTRIBUICAO_EMPREGADOS	= NULL
+            ,DATA_PAGAMENTO	= NULL
+            ,AUTORIZACAO	= NULL
+        FROM VENDAS A
+        WHERE PEDIDO = @PEDIDO
+    end try
+    begin catch
+        select @mensagem = 'FATURAMENTO:' + error_message()
+        rollback
+        UPDATE CSM_NOTAS_SERVICO SET MENSAGEM = @mensagem WHERE ID_NOTA = @ID_NOTA
+        GOTO PROXIMO
+    end catch
+
+    BEGIN TRY
+		INSERT INTO [dbo].[FATURAMENTO_ITEM]
+           ([CLASSIF_FISCAL]
+           ,[CODIGO_FISCAL_OPERACAO]
+           ,[CODIGO_ITEM]
+           ,[COD_TABELA_FILHA]
+           ,[COMISSAO_ITEM]
+           ,[COMISSAO_ITEM_GERENTE]
+           ,[CONTA_CONTABIL]
+           ,[DESCONTO_ITEM]
+           ,[DESCRICAO_ITEM]
+           ,[FAIXA]
+           ,[FILIAL]
+           ,[ID_EXCECAO_IMPOSTO]
+           ,[INDICADOR_CFOP]
+           ,[ITEM_IMPRESSAO]
+           ,[MPADRAO_DESCONTO_ITEM]
+           ,[MPADRAO_PRECO_UNITARIO]
+           ,[MPADRAO_VALOR_ITEM]
+           ,[NF_SAIDA]
+           ,[PESO]
+           ,[PORCENTAGEM_ITEM_RATEIO]
+           ,[PRECO_UNITARIO]
+           ,[QTDE_DEVOLVIDA]
+           ,[QTDE_ITEM]
+           ,[QTDE_RETORNAR_BENEFICIAMENTO]
+           ,[SERIE_NF]
+           ,[SUB_ITEM_TAMANHO]
+           ,[TRIBUT_ICMS]
+           ,[TRIBUT_ORIGEM]
+           ,[UNIDADE]
+           ,[VALOR_ITEM]
+           ,[REFERENCIA]
+           ,[REFERENCIA_ITEM]
+           ,[REFERENCIA_PEDIDO]
+           ,[TIMESTAMP]
+           ,[MPADRAO_VALOR_DESCONTOS]
+           ,[MPADRAO_VALOR_ENCARGOS]
+           ,[NAO_SOMA_VALOR]
+           ,[OBS_ITEM]
+           ,[ITEM_NFE]
+           ,[MPADRAO_SEGURO_ITEM]
+           ,[MPADRAO_FRETE_ITEM]
+           ,[MPADRAO_ENCARGO_ITEM]
+           ,[RATEIO_FILIAL]
+           ,[RATEIO_CENTRO_CUSTO]
+           ,[ORIGEM_ITEM]
+           ,[VALOR_IMPOSTO_ITEM]
+           ,[INDICA_PRODUTO_PROCESSO]
+           ,[CODIGO_FCI]
+           ,[PRECO_UNITARIO_ORIGINAL]
+           ,[CTB_TIPO_OPERACAO]
+           ,[ID_SUB_PROJETO]
+           ,[VALOR_IMPOSTO_ITEM_MUNICIPAL]
+           ,[VALOR_IMPOSTO_ITEM_ESTADUAL]
+           ,[ID_CEST_NCM]
+           ,[NUMERO_IMOBILIZADO]
+           ,[NOME_CONTAGEM]
+           ,[OBS_CONTRIB_NOME]
+           ,[OBS_CONTRIB_CONTEUDO]
+           ,[OBS_FISCO_NOME]
+           ,[OBS_FISCO_CONTEUDO])
+		SELECT
+            CLASSIF_FISCAL	='00000000'
+            ,CODIGO_FISCAL_OPERACAO	='9981'
+            ,CODIGO_ITEM	='311107 - SERVIÇO DE REPRESENTAÇÃO'
+            ,COD_TABELA_FILHA	='C'
+            ,COMISSAO_ITEM	=0
+            ,COMISSAO_ITEM_GERENTE	=0
+            ,CONTA_CONTABIL	='311107'
+            ,DESCONTO_ITEM	=0
+            ,DESCRICAO_ITEM	='311107 - SERVIÇO DE REPRESENTAÇÃO'
+            ,FAIXA	=1
+            ,FILIAL	=@FILIAL
+            ,ID_EXCECAO_IMPOSTO	=63914
+            ,INDICADOR_CFOP	=89
+            ,ITEM_IMPRESSAO	='0001'
+            ,MPADRAO_DESCONTO_ITEM	=0
+            ,MPADRAO_PRECO_UNITARIO	=@VALOR_NOTA
+            ,MPADRAO_VALOR_ITEM	=@VALOR_NOTA
+            ,NF_SAIDA	=@NF_NUMERO
+            ,PESO	=1
+            ,PORCENTAGEM_ITEM_RATEIO	=100
+            ,PRECO_UNITARIO	=@VALOR_NOTA
+            ,QTDE_DEVOLVIDA	=0
+            ,QTDE_ITEM	=1
+            ,QTDE_RETORNAR_BENEFICIAMENTO	=0
+            ,SERIE_NF	=@SERIE_NF
+            ,SUB_ITEM_TAMANHO	=0
+            ,TRIBUT_ICMS	='41'
+            ,TRIBUT_ORIGEM	='0'
+            ,UNIDADE	='UN'
+            ,VALOR_ITEM	=@VALOR_NOTA
+            ,REFERENCIA	=null
+            ,REFERENCIA_ITEM	=null
+            ,REFERENCIA_PEDIDO	=NULL
+            ,TIMESTAMP	=DBO.FX_PRODUCAO_PRECO (@VALOR_NOTA, 'T')
+            ,MPADRAO_VALOR_DESCONTOS	=0
+            ,MPADRAO_VALOR_ENCARGOS	=0
+            ,NAO_SOMA_VALOR	=0
+            ,OBS_ITEM	=NULL 
+            ,ITEM_NFE	=null
+            ,MPADRAO_SEGURO_ITEM	=0
+            ,MPADRAO_FRETE_ITEM	=0
+            ,MPADRAO_ENCARGO_ITEM	=0
+            ,RATEIO_FILIAL	='190421'
+            ,RATEIO_CENTRO_CUSTO	= @centro_custo
+            ,ORIGEM_ITEM	='I'
+            ,VALOR_IMPOSTO_ITEM	=0
+            ,INDICA_PRODUTO_PROCESSO	=0
+            ,CODIGO_FCI	=NULL
+            ,PRECO_UNITARIO_ORIGINAL	=@VALOR_NOTA
+            ,CTB_TIPO_OPERACAO	=NULL
+            ,ID_SUB_PROJETO	=NULL
+            ,VALOR_IMPOSTO_ITEM_MUNICIPAL	=0
+            ,VALOR_IMPOSTO_ITEM_ESTADUAL	=0
+            ,ID_CEST_NCM	=null
+            ,NUMERO_IMOBILIZADO	=NULL
+            ,NOME_CONTAGEM	=NULL
+            ,OBS_CONTRIB_NOME	=NULL
+            ,OBS_CONTRIB_CONTEUDO	=NULL
+            ,OBS_FISCO_NOME	=NULL
+            ,OBS_FISCO_CONTEUDO	=NULL
+    end try
+    begin catch
+        select @mensagem = 'FATURAMENTO_ITEM:' + error_message()
+        rollback
+        UPDATE CSM_NOTAS_SERVICO SET MENSAGEM = @mensagem WHERE ID_NOTA = @ID_NOTA
+        GOTO PROXIMO
+    end catch
+
+    BEGIN TRY
+        EXEC LX_GERA_IMPOSTOS_SAIDA @FILIAL, @nf_numero, @SERIE_NF, 0, 1, 1 
+    end try
+    
+    begin catch
+        select @mensagem = 'IMPOSTOS:' + error_message()
+        rollback
+        UPDATE CSM_NOTAS_SERVICO SET MENSAGEM = @mensagem WHERE ID_NOTA = @ID_NOTA
+        GOTO PROXIMO
+    end catch
+
+    SELECT @mensagem = 'NOTA EMITIDA'
+
+    UPDATE CSM_NOTAS_SERVICO SET NF_SAIDA = @NF_NUMERO, FILIAL = @FILIAL, SERIE_NF = @SERIE_NF, MENSAGEM = @mensagem WHERE ID_NOTA = @ID_NOTA
+
+    commit
+    
+    goto proximo
+
+    proximo:
+    	FETCH NEXT FROM CUR_PED INTO @ID_NOTA, @pedido, @valor_planilha, @centro_custo 
+end
+
+close CUR_PED 
+deallocate CUR_PED 
 
-	Declare	@errno		Int,
-			@errmsg		varchar(1000),
-			@LXUSUARIO	varchar(40),
-			@data_trava datetime
-
-	DECLARE @VALOR_INATIVO VARCHAR(20)
-
-	IF (	SELECT COUNT(*)
-			FROM INSERTED 
-			WHERE ISNULL(HISTORICO,'')=''
-	) > 0
-		BEGIN
-			SELECT	@errno=30002,
-					@errmsg='CTB_LANCAMENTO_ITEM - Não é possível incluir lançamento, Histórico ou Código Histórico esta nulo ou vazio.'
-			GOTO error
-		END
-
-	/*GS:01.01 - INICIO */
-	IF ( SELECT COUNT(1)
-			FROM INSERTED A 
-			INNER JOIN CTB_LANCAMENTO C (NOLOCK)					ON A.EMPRESA = C.EMPRESA AND A.LANCAMENTO = C.LANCAMENTO
-			INNER JOIN W_GS_FILIAIS_CONTA_CONTABIL_MUTUO B (NOLOCK) ON C.COD_FILIAL = B.COD_FILIAL AND A.CONTA_CONTABIL = B.CONTA_CONTABIL
-		) > 0
-	BEGIN
-			SELECT  @errno=30002,
-			@errmsg='CTB_LANCAMENTO_ITEM - Não é possível incluir essa conta contábil para a filial informada! Favor procurar a Controladoria. PROJETO MUTUO'
-			GOTO error
-	END
-	/*GS:01.01 - FIM */
-
-
-
-/*AF_BRANDS - ISMARA - NÃO PERMITIR SALVAR LANÇAMENTOS COM MATRIZES DIFERENTES NO CABECALHO E NOS ITENS*/
---#GS:01.05#
---#GS:01.04#
---#GS:01.03#
---#GS:01.02#
-	--IF (
-	--		-- #GS:01.01#
-	--		--SELECT COUNT(*)
-	--		SELECT COUNT(1)
-	--		FROM INSERTED A
-
-	--		JOIN CTB_LANCAMENTO B (nolock)/*#GS:01.02#*/ON A.LANCAMENTO=B.LANCAMENTO AND A.EMPRESA=B.EMPRESA
-
-	--		JOIN FILIAIS FIL_I (nolock)/*#GS:01.02#*/ON A.RATEIO_FILIAL=FIL_I.CLIFOR
-
-	--		JOIN FILIAIS FIL_C (nolock)/*#GS:01.02#*/ON B.COD_FILIAL=FIL_C.CLIFOR
-
-	--		WHERE FIL_I.MATRIZ<>FIL_C.MATRIZ 
-
-	--) > 0
-
-	--BEGIN
-
-	--	  SELECT  @ERRNO=30002,
-
-	--	   @ERRMSG='RATEIO DE FILIAL COM MATRIZ CONTÁBIL DIFERENTE DO CABEÇALHO DO LANCAMENTO. OPERAÇÃO CANCELADA.'
-
-	--	   GOTO ERROR
-
-	--END
-
-/**/
-
-
-
---/*31/07/2014 - ISMARA - NÃO PERMITIR SALVAR LANÇAMENTOS COM CONTA CONTABIL INATIVA*/
-
---	IF (
-
---			SELECT COUNT(*)
-
---			FROM INSERTED A
-
---			JOIN CTB_CONTA_PLANO B ON A.CONTA_CONTABIL=B.CONTA_CONTABIL
-
---			WHERE B.INATIVA =1
-
---	) > 0
-
---	BEGIN
-
---		SELECT @VALOR_INATIVO=MIN(A.CONTA_CONTABIL) FROM INSERTED A JOIN CTB_CONTA_PLANO B ON A.CONTA_CONTABIL=B.CONTA_CONTABIL WHERE B.INATIVA =1
-
-
-
---		  SELECT  @ERRNO=30002,
-
---		   @ERRMSG='CONTA CONTABIL '+LTRIM(RTRIM(@VALOR_INATIVO))+' ESTÁ INATIVA E NÃO PODE SER USADA. OPERAÇÃO CANCELADA. PROCURAR A CONTROLADORIA.'
-
---		   GOTO ERROR
-
---	END
-
---/**/
-
-
-
-/*31/07/2014 - ISMARA - NÃO PERMITIR SALVAR LANÇAMENTOS COM RATEIO CC QUE NÃO TEM A FILIAL CADASTRADA PARA ELE. CC SEM FILIAL ASSOCIADA ESTÃO LIBERADOS PARA TODAS*/
-
-	IF (SELECT 1 FROM PARAMETROS WHERE PARAMETRO = 'ANM_CONTROLE_FILIAL_CC' AND VALOR_ATUAL='.T.')>0
-	BEGIN
-		IF (
-				-- #GS:01.01#
-				--SELECT COUNT(*)
-				SELECT COUNT(1)
-				FROM INSERTED A
-				JOIN (
-					SELECT A.CENTRO_CUSTO,COD_FILIAL --CENTROS DE CUSTO QUE TÊM FILIAL
-					FROM CTB_CENTRO_CUSTO A(nolock)/*#GS:01.02#*/
-					JOIN CTB_FILIAL_CENTRO_CUSTO B (nolock)/*#GS:01.02#*/ON A.CENTRO_CUSTO=B.CENTRO_CUSTO
-				) B ON A.RATEIO_CENTRO_CUSTO=B.CENTRO_CUSTO
-				LEFT JOIN (
-					SELECT A.CENTRO_CUSTO,COD_FILIAL --CENTROS DE CUSTO QUE TÊM FILIAL
-					FROM CTB_CENTRO_CUSTO A(nolock)/*#GS:01.02#*/
-					JOIN CTB_FILIAL_CENTRO_CUSTO B (nolock)/*#GS:01.02#*/ON A.CENTRO_CUSTO=B.CENTRO_CUSTO
-				) C ON A.RATEIO_CENTRO_CUSTO=C.CENTRO_CUSTO AND A.RATEIO_FILIAL=C.COD_FILIAL
-				WHERE C.COD_FILIAL IS NULL 
-		) > 0
-			BEGIN
-				SELECT @VALOR_INATIVO=MIN(A.RATEIO_CENTRO_CUSTO)
-				FROM INSERTED A
-				JOIN (
-					SELECT A.CENTRO_CUSTO,COD_FILIAL 
-					FROM CTB_CENTRO_CUSTO A(nolock)/*#GS:01.02#*/
-					JOIN CTB_FILIAL_CENTRO_CUSTO B (nolock)/*#GS:01.02#*/ON A.CENTRO_CUSTO=B.CENTRO_CUSTO
-				) B ON A.RATEIO_CENTRO_CUSTO=B.CENTRO_CUSTO --CC QUE POSSUEM FILIAL ASSOCIADA
-				LEFT JOIN (
-					SELECT A.CENTRO_CUSTO,COD_FILIAL 
-					FROM CTB_CENTRO_CUSTO A (nolock)/*#GS:01.02#*/
-					JOIN CTB_FILIAL_CENTRO_CUSTO B (nolock)/*#GS:01.02#*/ON A.CENTRO_CUSTO=B.CENTRO_CUSTO
-				) C ON A.RATEIO_CENTRO_CUSTO=C.CENTRO_CUSTO AND A.RATEIO_FILIAL=C.COD_FILIAL 
-				WHERE C.COD_FILIAL IS NULL --FILIAL NÃO EXISTE PARA ESTE CC
-
-				SELECT  @ERRNO=30002,
-						@ERRMSG='RATEIO CENTRO DE CUSTO '+LTRIM(RTRIM(@VALOR_INATIVO))+' NÃO ESTÁ LIBERADO PARA ESTE RATEIO FILIAL. OPERAÇÃO CANCELADA. PROCURAR A CONTROLADORIA.'
-				GOTO ERROR
-			END
-	END
-
-/**/
-
-
-
-/*01/08/2014 - ISMARA - NÃO PERMITIR SALVAR LANÇAMENTOS COM CONTAS DE MATRIZES INDEVIDAS - USUARIO DEFINE NA PROPRIEDADE QUAL(IS) A(S) MATRIZ(ES) POSSIVEIS PARA ESTA CONTA*/
-
-	IF (
-
-			-- #GS:01.01#
-			--SELECT COUNT(*)
-			SELECT COUNT(1)
-
-			FROM INSERTED A
-
-			JOIN FILIAIS B (nolock)/*#GS:01.02#*/ON A.RATEIO_FILIAL=B.COD_FILIAL
-
-			JOIN (SELECT --* -- #GS:01.01#
-			CONTA_CONTABIL 
-			FROM PROP_CTB_CONTA_PLANO (nolock)/*#GS:01.02#*/WHERE PROPRIEDADE='00145')C ON A.CONTA_CONTABIL=C.CONTA_CONTABIL
-
-			LEFT JOIN (SELECT --*  -- #GS:01.01#
-			CONTA_CONTABIL,VALOR_PROPRIEDADE
-			FROM PROP_CTB_CONTA_PLANO (nolock)/*#GS:01.02#*/WHERE PROPRIEDADE='00145')D ON A.CONTA_CONTABIL=D.CONTA_CONTABIL AND B.MATRIZ=D.VALOR_PROPRIEDADE
-
-			WHERE D.VALOR_PROPRIEDADE IS NULL
-
-	) > 0
-
-	BEGIN
-
-		SELECT @VALOR_INATIVO=MIN(A.CONTA_CONTABIL)
-
-		FROM INSERTED A
-
-		JOIN FILIAIS B (nolock)/*#GS:01.02#*/ON A.RATEIO_FILIAL=B.COD_FILIAL
-
-		JOIN (SELECT CONTA_CONTABIL FROM PROP_CTB_CONTA_PLANO (nolock)/*#GS:01.02#*/WHERE PROPRIEDADE='00145')C ON A.CONTA_CONTABIL=C.CONTA_CONTABIL
-
-		LEFT JOIN (SELECT CONTA_CONTABIL,VALOR_PROPRIEDADE FROM PROP_CTB_CONTA_PLANO (nolock)/*#GS:01.02#*/WHERE PROPRIEDADE='00145')D ON A.CONTA_CONTABIL=D.CONTA_CONTABIL AND B.MATRIZ=D.VALOR_PROPRIEDADE
-
-		WHERE D.VALOR_PROPRIEDADE IS NULL
-
-		SELECT  @ERRNO=30002,
-				@ERRMSG='CONTA CONTABIL '+LTRIM(RTRIM(@VALOR_INATIVO))+' NÃO ESTÁ LIBERADA PARA ESTA FILIAL. OPERAÇÃO CANCELADA. PROCURAR A CONTROLADORIA.'
-
-		GOTO ERROR
-
-	END
-
-/**/
-
-	/*10/05/2016 - ISMARA -  CHAMADO #216124 - POR FAVOR, SOLICITO UM BLOQUEIO NO LINX PARA QUE NÃO CONSIGA EFETUAR LANÇAMENTO COM VALOR NEGATIVO, POIS ALÉM DE ESTAR ERRADO GERA ERRO NO SPED CONTABIL.*/
-		IF (
-			SELECT COUNT(*)
-			FROM INSERTED
-			WHERE CREDITO<0 OR DEBITO<0
-		) > 0
-			BEGIN
-				SELECT  @ERRNO=30002,
-						@ERRMSG='NÃO É PERMITIDO SALVAR LANÇAMENTOS COM VALORES NEGATIVOS. VERIFIQUE!!!'
-				GOTO ERROR
-			END
-	/**/
-
-
-	-- Colocar a mesma clausula da linx
-	DECLARE @INDICA_UPDATE INT
-	
-	SELECT @INDICA_UPDATE = COUNT(1) 
-	FROM DELETED A 
-	JOIN INSERTED B 
-		ON A.EMPRESA = B.EMPRESA 
-			AND A.LANCAMENTO = B.LANCAMENTO 
-			AND A.ITEM = B.ITEM 
-	WHERE  A.CAMBIO_NA_DATA <> B.CAMBIO_NA_DATA 
-		  OR A.CODIGO_HISTORICO <> B.CODIGO_HISTORICO 
-		  OR A.COD_CLIFOR <> B.COD_CLIFOR 
-		  OR A.CONTA_CONTABIL <> B.CONTA_CONTABIL 
-		  OR A.CREDITO <> B.CREDITO 
-		  OR A.CREDITO_MOEDA <> B.CREDITO_MOEDA 
-		  OR A.DEBITO <> B.DEBITO 
-		  OR A.DEBITO_MOEDA <> B.DEBITO_MOEDA 
-		  OR A.LX_TIPO_LANCAMENTO <> B.LX_TIPO_LANCAMENTO 
-		  OR A.MOEDA <> B.MOEDA 
-		  OR A.RATEIO_CENTRO_CUSTO <> B.RATEIO_CENTRO_CUSTO 
-		  OR A.RATEIO_FILIAL <> B.RATEIO_FILIAL 
-
-	SELECT @INDICA_UPDATE = ISNULL(@INDICA_UPDATE, 0) 
-
-	if (UPDATE(CONTA_CONTABIL) OR UPDATE(CREDITO) OR UPDATE(DEBITO) OR UPDATE(RATEIO_FILIAL) OR UPDATE(RATEIO_CENTRO_CUSTO)) and @INDICA_UPDATE > 0 AND SYSTEM_USER NOT IN ('FILIPE.SILVA')
-		BEGIN
-			set @data_trava = '19000101'
-			SELECT @LXUSUARIO = USUARIO FROM USERS WHERE LX_SYSTEM_USER = CAST(SYSTEM_USER AS VARCHAR(240)) --#GS:01.06#
-			SELECT @data_trava = data_bloqueio 
-			FROM PROP_USERS  a (nolock)/*#GS:01.02#*/
-			join mit_perfil_bloqueio b (nolock)/*#GS:01.02#*/on a.VALOR_PROPRIEDADE = b.perfil
-			WHERE PROPRIEDADE = '01011'	AND a.USUARIO = @LXUSUARIO
-
-			IF ( SELECT  COUNT(1) FROM Deleted as a join ctb_lancamento as b (nolock)/*#GS:01.02#*/on (a.empresa=b.empresa and a.lancamento=b.lancamento) WHERE DATA_LANCAMENTO <= @data_trava ) +
-				( SELECT  COUNT(1) FROM Inserted as a join ctb_lancamento as b (nolock)/*#GS:01.02#*/on (a.empresa=b.empresa and a.lancamento=b.lancamento) WHERE DATA_LANCAMENTO <= @data_trava) > 0
-				BEGIN
-					SELECT  @errno=30002, @errmsg='Perfil não autorizado a alterar itens em lançamento anterior a '+CONVERT(Char(10),@data_trava,103)+'. Favor verificar com a controladoria!' -- #1#
-					GOTO error
-				END
-		END		
-
-	RETURN
-
-ERROR:
-	RAISERROR (@ERRMSG, 16, 1)
-	ROLLBACK TRANSACTION
-
-END
 GO
 
-ALTER TABLE [dbo].[CTB_LANCAMENTO_ITEM] ENABLE TRIGGER [LXU_ANM_CTB_LANCAMENTO_ITEM]
-GO
